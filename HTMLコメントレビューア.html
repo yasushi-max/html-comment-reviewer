@@ -46,6 +46,8 @@
   header button:disabled { opacity: 0.45; cursor: default; }
   header button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
   header button.primary:hover:not(:disabled) { background: var(--accent-deep); }
+  header button.mode-on { background: #7e57c2; border-color: #7e57c2; font-weight: 600; }
+  header button.mode-on:hover:not(:disabled) { background: #6a45b0; }
   header label.toggle {
     flex: none; display: inline-flex; align-items: center; gap: 5px;
     font-size: 11.5px; color: #8a919c; cursor: pointer; user-select: none;
@@ -137,6 +139,8 @@
   }
   .cmt .num.doc { background: #5b6470; }
   .cmt .num.edit { background: #43a047; }
+  .cmt .num.design { background: #7e57c2; }
+  .cmt .body.design { color: #5e35b1; font-weight: 500; }
   .cmt .quote.strike { text-decoration: line-through; text-decoration-color: rgba(198,40,40,0.6); }
   .cmt .body.rep { color: #2e7d32; font-weight: 500; }
   .cmt .sec {
@@ -195,6 +199,7 @@
   <label class="toggle" id="scriptsToggleWrap" hidden title="資料が真っ白・表示が崩れる場合にオンにしてください（資料内のJavaScriptを実行します）">
     <input type="checkbox" id="scriptsToggle"> スクリプトを実行（表示が崩れる資料用）
   </label>
+  <button id="designBtn" disabled title="ブロックの移動・サイズ変更・文字サイズ調整">🎨 デザイン調整</button>
   <button id="openBtn">📂 HTMLを開く</button>
   <button id="saveBtn" class="primary" disabled>💾 コメント付きで保存</button>
   <button id="helpBtn">？ 使い方</button>
@@ -236,6 +241,7 @@
         <b>② 「💬 コメント」か「✏️ 直接修正」を選ぶ</b><br><br>
         ・💬 コメント …「こう直して」という指示を書く（Wordのコメントと同じ感覚）<br>
         ・✏️ 直接修正 … 修正後の文言を自分で入力する（Wordの変更履歴のように記録されます）<br><br>
+        レイアウト（位置・大きさ・文字サイズ）を変えたいときは、上部の「🎨 デザイン調整」からどうぞ。<br><br>
         文書全体への指示（例：全体的にトーンを柔らかく）は右上の「＋ 全体コメント」からどうぞ。
       </div>
     </div>
@@ -248,6 +254,7 @@
     <ol>
       <li><b>HTML資料を開く</b>：「📂 HTMLを開く」かドラッグ＆ドロップ</li>
       <li><b>コメント・修正を付ける</b>：直したい文字を選択 → 「💬 コメント」で指示を書くか、「✏️ 直接修正」で修正後の文言を自分で入力（Wordの変更履歴のように記録され、Claudeが反映時にそのまま置き換えます）。文書全体への指示は「＋ 全体コメント」</li>
+      <li><b>レイアウトを調整する</b>：「🎨 デザイン調整」を押してから、動かしたいブロックをクリック → そのままドラッグで移動、四隅のハンドルでサイズ変更、ツールバーの「A＋/A−」で文字サイズ。調整内容も指示として記録され、Claudeが反映時にレイアウトを壊さない自然な形で本実装します。もう一度ボタンを押すと通常モードに戻ります</li>
       <li><b>保存する</b>：「💾 コメント付きで保存」→ <b>「元の名前_コメント付き.html」</b>ができます（保存先を選ぶ画面が出た場合は選んだ場所に、出ない場合はダウンロードフォルダに入ります）</li>
       <li><b>Claudeに渡す</b>：そのファイルをClaude Codeのチャットにドラッグして、こう頼むだけ：</li>
     </ol>
@@ -291,6 +298,23 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
    - type "edit": quote が指す箇所の文言を replacement の文言にそのまま置き換える。
      勝手な言い換えや追加はしない。HTMLタグが絡む場合は、画面に表示される文言が
      replacement になるよう最小限のタグ調整のみ行う。
+   - type "design": レイアウト調整の指示。target（selector / tag / classes /
+     textHead / section）で対象要素を特定し、changes を反映する。
+     ・move.dx / dy: 右／下へ動かしたピクセル数（負は左／上）。これは画面上の
+       実測値なので、transformで座標を書き写すのではなく、その文書のスタイル
+       設計に合った自然な方法（マージン・flex/gridの配置・位置指定など）で
+       「その方向にそれだけ動いた見た目」を実現する。
+     ・size.widthPx / heightPx: 変更後の実測サイズ（origWidthPx / origHeightPx が
+       変更前）。割合に換算して % や fr 等、文書の既存の書き方に合わせてよい。
+     ・font.scale: 文字サイズの倍率（origPx は変更前の実測px）。対象要素内の
+       文字が倍率相当の大きさになるよう font-size 指定を調整する。
+     反映の結果ほかの要素と重なる・はみ出す場合は、周囲の余白等も含めて
+     自然に調整してよい。
+     注意: target の selector / textHead は表示時のDOMから採取した値のため、
+     ソースと完全には一致しないことがある（スクリプトで内容を生成する資料は特に）。
+     selector で特定できない場合は textHead（タグ・空白の差を無視して照合）→
+     tag / classes / section の順で対象を推定し、確信が持てなければそのコメントは
+     保留して、最後に「反映できなかったコメント」として報告する。
    - type "document": 文書全体に対する指示として反映する。
 2. フィールドの意味:
    - no: ユーザーが画面上で見ているコメント番号（本文ハイライトのバッジ番号と同じ）。
@@ -321,6 +345,9 @@ const state = {
   pending: null,      // 入力中のコメント {type, range, anchor}
   activeCid: null,
   loadToken: 0,
+  designMode: false,  // デザイン調整モード中か
+  designSel: null,    // デザイン調整で選択中の要素（実行時のみ）
+  drag: null,         // ドラッグ操作の途中経過（実行時のみ）
 };
 
 const $ = (id) => document.getElementById(id);
@@ -376,6 +403,51 @@ const IFRAME_CSS = `
   .cr-float .cr-fbtn:hover { background: #e8702e; }
   .cr-float .cr-fbtn-comment::after { content: "💬 コメント"; }
   .cr-float .cr-fbtn-edit::after { content: "✏️ 直接修正"; }
+
+  /* ===== デザイン調整モード ===== */
+  html.cr-design-active, html.cr-design-active body * { user-select: none !important; }
+  html.cr-design-active body { cursor: crosshair; }
+  .cr-design-banner {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 2147483646; pointer-events: auto; cursor: pointer; user-select: none;
+    background: #7e57c2; color: #fff; padding: 8px 18px; border-radius: 18px;
+    font: 13px/1.5 -apple-system, "Hiragino Sans", sans-serif;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3); white-space: nowrap;
+  }
+  .cr-design-banner:hover { background: #6a45b0; }
+  .cr-design-banner::after { content: "🎨 デザイン調整モード中 — ブロックをクリックで選択（ここを押すと終了）"; }
+  .cr-d-hover { outline: 2px dashed rgba(126, 87, 194, 0.65) !important; outline-offset: 1px; cursor: pointer; }
+  .cr-design-overlay { position: absolute; z-index: 2147483600; pointer-events: none; }
+  .cr-d-box {
+    position: absolute; inset: 0; pointer-events: auto; cursor: move;
+    border: 2px solid #7e57c2; box-shadow: 0 0 0 2px rgba(126, 87, 194, 0.25);
+    background: transparent;
+  }
+  .cr-d-h {
+    position: absolute; width: 12px; height: 12px; pointer-events: auto;
+    background: #fff; border: 2px solid #7e57c2; border-radius: 3px; box-sizing: border-box;
+  }
+  .cr-d-h.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+  .cr-d-h.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+  .cr-d-h.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+  .cr-d-h.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+  .cr-d-bar {
+    position: absolute; left: 50%; top: -46px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 1px; pointer-events: auto;
+    background: #23272e; border-radius: 18px; padding: 4px 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35); white-space: nowrap;
+  }
+  .cr-d-bar button {
+    appearance: none; border: 0; background: none; color: #fff;
+    font-size: 12px; line-height: 1.4; padding: 4px 9px; border-radius: 10px; cursor: pointer;
+    font-family: -apple-system, "Hiragino Sans", sans-serif;
+  }
+  .cr-d-bar button:hover { background: #7e57c2; }
+  .cr-d-pct {
+    color: #cfd2d8; font-size: 11px; min-width: 40px; text-align: center;
+    font-family: -apple-system, sans-serif;
+  }
+  .cr-d-flash { outline: 3px solid rgba(126, 87, 194, 0.85) !important; outline-offset: 2px; }
 `;
 
 /* ============================================================
@@ -440,7 +512,39 @@ async function openFile(file) {
 
   if (data && data.format === EMBED_FORMAT && Array.isArray(data.comments)) {
     for (const c of data.comments) {
-      if (!c || (typeof c.comment !== 'string' && typeof c.replacement !== 'string')) continue;
+      if (!c) continue;
+      if (c.type === 'design') {
+        if (!c.target || !c.changes) continue;
+        const ch = {};
+        if (c.changes.move && (c.changes.move.dx || c.changes.move.dy)) {
+          ch.move = { dx: Math.round(+c.changes.move.dx) || 0, dy: Math.round(+c.changes.move.dy) || 0 };
+        }
+        if (c.changes.size && +c.changes.size.widthPx) {
+          ch.size = {
+            widthPx: Math.round(+c.changes.size.widthPx), heightPx: Math.round(+c.changes.size.heightPx) || 0,
+            origWidthPx: Math.round(+c.changes.size.origWidthPx) || 0, origHeightPx: Math.round(+c.changes.size.origHeightPx) || 0,
+          };
+        }
+        if (c.changes.font && +c.changes.font.scale && +c.changes.font.scale !== 1) {
+          ch.font = { scale: +c.changes.font.scale, origPx: +c.changes.font.origPx || 16 };
+        }
+        state.comments.push({
+          id: 'c' + (state.nextId++),
+          type: 'design',
+          target: {
+            selector: c.target.selector || '', tag: c.target.tag || '',
+            classes: c.target.classes || '', textHead: c.target.textHead || '',
+            section: c.target.section || '',
+          },
+          changes: ch,
+          origRect: ch.size ? { w: ch.size.origWidthPx, h: ch.size.origHeightPx } : null,
+          origFontPx: ch.font ? ch.font.origPx : null,
+          createdAt: c.createdAt || new Date().toISOString(),
+          anchored: false,
+        });
+        continue;
+      }
+      if (typeof c.comment !== 'string' && typeof c.replacement !== 'string') continue;
       const type = c.type === 'document' ? 'document' : (c.type === 'edit' ? 'edit' : 'selection');
       state.comments.push({
         id: 'c' + (state.nextId++),
@@ -497,6 +601,13 @@ function renderDoc() {
   return new Promise((resolve) => {
     const token = ++state.loadToken;
     const scripts = $('scriptsToggle').checked;
+    // 再描画時はデザイン調整モードを解除（要素参照が無効になるため）
+    state.designMode = false;
+    state.designSel = null;
+    state.drag = null;
+    state.pickAtDown = null;
+    $('designBtn').classList.remove('mode-on');
+    $('designBtn').textContent = '🎨 デザイン調整';
     frame.removeAttribute('sandbox');
     $('dropZone').style.display = 'none';
     frame.hidden = false;
@@ -546,9 +657,18 @@ function setupIframe() {
   iwin().addEventListener('scroll', hideFloatBtn, true);
   iwin().addEventListener('resize', hideFloatBtn);
 
+  // デザイン調整モードの操作（captureで通常クリックより先に処理）
+  d.addEventListener('mousedown', onDesignMouseDown, true);
+  d.addEventListener('mousemove', onDesignMouseMove, true);
+  d.addEventListener('mouseup', onDesignMouseUp, true);
+  d.addEventListener('click', onDesignClick, true);
+  iwin().addEventListener('scroll', positionDesignOverlay, true);
+  iwin().addEventListener('resize', positionDesignOverlay);
+
   // ハイライト／バッジのクリック → サイドバーと同期
   // リンクは無効化（クリックでiframeが別ページへ遷移してレビュー画面が壊れるのを防ぐ）
   d.addEventListener('click', (e) => {
+    if (state.designMode) return; // デザイン調整中はonDesignClickが処理する
     const a = e.target.closest && e.target.closest('a[href]');
     if (a) {
       e.preventDefault();
@@ -572,6 +692,23 @@ function setupIframe() {
 
   // 既存コメントを本文に再アンカー
   for (const c of state.comments) {
+    if (c.type === 'design') {
+      const el = findDesignTarget(c.target, d);
+      if (el) {
+        // 変更適用前（無傷の状態）に基準値を補完しておく
+        // （開き直し後にサイズや文字を再調整したとき、変更後の値を「元」と誤認しないため）
+        if (!c.origRect) {
+          const r = el.getBoundingClientRect();
+          c.origRect = { w: Math.round(r.width), h: Math.round(r.height) };
+        }
+        if (!c.origFontPx) c.origFontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
+        applyDesignEntry(c, el, d);
+        c.anchored = true;
+      } else {
+        c.anchored = false;
+      }
+      continue;
+    }
     if (c.type !== 'selection' && c.type !== 'edit') continue;
     const r = findRangeForAnchor(c, d);
     c.anchored = r ? wrapRange(r, c.id, d) : false;
@@ -592,13 +729,14 @@ function currentSelectionRange() {
   // （文書本来のテキストではないため、コメントや再修正は元の文言側に付けてもらう）
   const ca = r.commonAncestorContainer;
   const el = ca.nodeType === 1 ? ca : ca.parentElement;
-  if (el && el.closest && el.closest('.cr-ins, .cr-float')) return null;
+  if (el && el.closest && el.closest('.cr-ins, .cr-float, .cr-design-overlay')) return null;
   return r;
 }
 
 function updateFloatBtn() {
   const d = idoc();
   if (!d) return;
+  if (state.designMode) { hideFloatBtn(); return; }
   const r = currentSelectionRange();
   if (!r) { hideFloatBtn(); return; }
   let btn = d.querySelector('.cr-float');
@@ -669,7 +807,7 @@ function computeAnchorFromRange(range, d) {
     const textOfRange = (r) => {
       const frag = r.cloneContents();
       if (frag.querySelectorAll) {
-        frag.querySelectorAll('.cr-ins, .cr-float, script, style').forEach((el) => el.remove());
+        frag.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, script, style').forEach((el) => el.remove());
       }
       return frag.textContent || '';
     };
@@ -716,8 +854,8 @@ function buildTextIndex(d) {
   const walker = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
       const p = n.parentElement;
-      // .cr-ins（直接修正の新文言）は文書本来のテキストではないので除外する
-      if (p && p.closest('script, style, .cr-float, .cr-ins')) return NodeFilter.FILTER_REJECT;
+      // .cr-ins（直接修正の新文言）やツールのUI要素は文書本来のテキストではないので除外する
+      if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
@@ -802,7 +940,7 @@ function wrapRange(range, cid, d) {
       acceptNode(n) {
         if (!range.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
         const p = n.parentElement;
-        if (p && p.closest('script, style, .cr-float, .cr-ins')) return NodeFilter.FILTER_REJECT;
+        if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay')) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
     });
@@ -865,6 +1003,536 @@ function unwrapComment(cid, d) {
     m.remove();
     p.normalize();
   });
+}
+
+/* ============================================================
+   デザイン調整モード
+   - ブロックをクリックで選択 → ドラッグ移動／四隅でサイズ変更／A±で文字サイズ
+   - 画面には即時反映（translate・width/height・font-sizeのインライン適用）
+   - 記録は「どの要素を・どれだけ動かしたか」という意図情報。Claudeが反映時に
+     座標の書き写しではなく自然なCSSに翻訳する（保存ソースは無傷のまま）
+   ============================================================ */
+
+const CAN_TRANSLATE = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('translate', '1px 1px');
+
+// 変更前のインラインstyle文字列（data-cr-orig-style）から、特定プロパティの値を復元する
+function restoreInlineProp(el, prop) {
+  const orig = el.dataset.crOrigStyle || '';
+  const m = orig.match(new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)', 'i'));
+  if (m) el.style.setProperty(prop, m[1].trim());
+  else el.style.removeProperty(prop);
+}
+
+function setTranslate(el, dx, dy) {
+  // translateプロパティは元のtransform(クラス指定)と合成できるため優先する
+  if (CAN_TRANSLATE) el.style.translate = `${dx}px ${dy}px`;
+  else el.style.transform = `translate(${dx}px, ${dy}px)`;
+}
+function clearTranslate(el) {
+  if (CAN_TRANSLATE) restoreInlineProp(el, 'translate');
+  else restoreInlineProp(el, 'transform');
+}
+
+// クリック位置から「選択対象のブロック」を決める（inline要素は親へ遡る）
+function designPickBlock(t, d) {
+  let cur = t && t.nodeType === 1 ? t : (t ? t.parentElement : null);
+  while (cur && cur !== d.body && cur !== d.documentElement) {
+    if (cur.closest('.cr-design-overlay, .cr-float, .cr-design-banner')) return null;
+    const disp = getComputedStyle(cur).display;
+    const isToolInline = cur.matches('mark.cr-mark, sup.cr-badge, ins.cr-ins');
+    if (!isToolInline && disp !== 'inline' && disp !== 'contents') return cur;
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+// 要素を特定するためのCSSセレクタ（id優先、クラス＋nth-of-typeで補強）
+function designCssPath(el, d) {
+  const parts = [];
+  let cur = el;
+  while (cur && cur !== d.body && cur !== d.documentElement && parts.length < 6) {
+    if (cur.id) { parts.unshift('#' + CSS.escape(cur.id)); break; }
+    let part = cur.tagName.toLowerCase();
+    const cls = [...cur.classList].filter((c) => !c.startsWith('cr-')).slice(0, 2);
+    if (cls.length) part += '.' + cls.map((c) => CSS.escape(c)).join('.');
+    const parent = cur.parentElement;
+    if (parent) {
+      const same = [...parent.children].filter((ch) => ch.tagName === cur.tagName);
+      if (same.length > 1) part += `:nth-of-type(${same.indexOf(cur) + 1})`;
+    }
+    parts.unshift(part);
+    cur = cur.parentElement;
+  }
+  return parts.join(' > ');
+}
+
+// ツールの挿入物を除いた、要素の先頭テキスト（要素特定の補助）
+function designTextHead(el) {
+  const tmp = el.cloneNode(true);
+  if (tmp.querySelectorAll) {
+    tmp.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, sup.cr-badge, script, style').forEach((x) => x.remove());
+  }
+  return normText(tmp.textContent).slice(0, 40);
+}
+
+function describeDesignTarget(el, d) {
+  return {
+    selector: designCssPath(el, d),
+    tag: el.tagName.toLowerCase(),
+    classes: [...el.classList].filter((c) => !c.startsWith('cr-')).join(' '),
+    textHead: designTextHead(el),
+    section: findSection({ startContainer: el, startOffset: 0 }, d),
+  };
+}
+
+// 保存された target 情報から要素を探す（開き直し時の復元）
+function findDesignTarget(t, d) {
+  if (t.selector) {
+    try {
+      const els = d.querySelectorAll(t.selector);
+      if (els.length === 1) return els[0];
+      if (els.length > 1) {
+        if (t.textHead) {
+          for (const el of els) if (designTextHead(el).startsWith(t.textHead.slice(0, 20))) return el;
+        }
+        return els[0];
+      }
+    } catch (e) { /* 不正なセレクタは無視してフォールバックへ */ }
+  }
+  if (t.textHead) {
+    const sel = t.tag || '*';
+    try {
+      for (const el of d.body.querySelectorAll(sel)) {
+        if (el.closest('.cr-design-overlay')) continue;
+        if (designTextHead(el).startsWith(t.textHead.slice(0, 20))) return el;
+      }
+    } catch (e) { /* noop */ }
+  }
+  return null;
+}
+
+// 要素に紐づくdesignエントリを取得（なければ作成し、変更前の状態を控える）
+function designEntryFor(el, d) {
+  let c = el.dataset.crDesign ? state.comments.find((x) => x.id === el.dataset.crDesign) : null;
+  if (!c) {
+    const r = el.getBoundingClientRect();
+    c = {
+      id: 'c' + (state.nextId++),
+      type: 'design',
+      target: describeDesignTarget(el, d),
+      changes: {},
+      origRect: { w: Math.round(r.width), h: Math.round(r.height) },
+      origFontPx: parseFloat(getComputedStyle(el).fontSize) || 16,
+      createdAt: new Date().toISOString(),
+      anchored: true,
+    };
+    state.comments.push(c);
+    el.dataset.crDesign = c.id;
+  }
+  if (el.dataset.crOrigStyle === undefined) el.dataset.crOrigStyle = el.getAttribute('style') || '';
+  if (!c.origRect) {
+    const r = el.getBoundingClientRect();
+    c.origRect = { w: Math.round(r.width), h: Math.round(r.height) };
+  }
+  if (!c.origFontPx) c.origFontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
+  return c;
+}
+
+// 文字サイズ倍率の適用。cqw等の明示サイズを持つ子要素にも効くように
+// 子孫それぞれの実測サイズ×倍率をインラインで設定する（倍率1で原状復帰）
+function applyFontScale(el, scale, d) {
+  const targets = [el, ...el.querySelectorAll('*')].filter((t) => {
+    if (t.closest('.cr-design-overlay, .cr-design-banner')) return false;
+    // mark/ins等のツール挿入要素は自前のfont-sizeを持たない＝親から継承するので
+    // 個別設定しない（後から挿入された場合の二重スケール防止）
+    if (t !== el && t.matches('sup.cr-badge, .cr-float, mark.cr-mark, ins.cr-ins')) return false;
+    // 別のdesignエントリの対象（とその配下）には触れない（入れ子時の衝突防止）
+    const owner = t === el ? el : t.closest('[data-cr-design]');
+    return owner === el || owner === null;
+  });
+  for (const t of targets) {
+    if (scale === 1 && t.dataset.crOfs === undefined) continue;
+    if (t.dataset.crOfs === undefined) {
+      t.dataset.crOfs = String(parseFloat(getComputedStyle(t).fontSize) || 16);
+      t.dataset.crOfsInline = t.style.fontSize || '';
+    }
+    if (scale === 1) {
+      t.style.fontSize = t.dataset.crOfsInline;
+      delete t.dataset.crOfs;
+      delete t.dataset.crOfsInline;
+    } else {
+      t.style.fontSize = (parseFloat(t.dataset.crOfs) * scale).toFixed(2) + 'px';
+    }
+  }
+}
+
+// エントリの内容を要素のスタイルに反映（何度呼んでも同じ結果になる）
+function applyDesignEntry(c, el, d) {
+  if (el.dataset.crOrigStyle === undefined) el.dataset.crOrigStyle = el.getAttribute('style') || '';
+  el.dataset.crDesign = c.id;
+  const ch = c.changes || {};
+  if (ch.move && (ch.move.dx || ch.move.dy)) setTranslate(el, ch.move.dx, ch.move.dy);
+  else clearTranslate(el);
+  if (ch.size) {
+    // 実測(border-box)サイズをそのまま指定できるよう box-sizing も揃える
+    el.style.boxSizing = 'border-box';
+    el.style.width = ch.size.widthPx + 'px';
+    el.style.height = ch.size.heightPx + 'px';
+  } else {
+    // サイズ変更なし：元のインライン値（あれば）に戻す
+    restoreInlineProp(el, 'box-sizing');
+    restoreInlineProp(el, 'width');
+    restoreInlineProp(el, 'height');
+  }
+  applyFontScale(el, ch.font ? ch.font.scale : 1, d);
+}
+
+// エントリの取り消し：要素を変更前の状態に戻す
+function revertDesignEntry(c, d) {
+  const el = d.querySelector(`[data-cr-design="${c.id}"]`);
+  if (!el) return;
+  applyFontScale(el, 1, d);
+  const orig = el.dataset.crOrigStyle || '';
+  if (orig) el.setAttribute('style', orig);
+  else el.removeAttribute('style');
+  delete el.dataset.crDesign;
+  delete el.dataset.crOrigStyle;
+}
+
+function finishDesignCommit(c, el, d, before) {
+  applyDesignEntry(c, el, d);
+  const after = JSON.stringify(c.changes);
+  const changed = before !== after;
+  if (!c.changes.move && !c.changes.size && !c.changes.font) {
+    // 実質変更なしになったらエントリごと取り消す
+    revertDesignEntry(c, d);
+    state.comments = state.comments.filter((x) => x.id !== c.id);
+  }
+  if (changed) {
+    // 実際に内容が変わったときだけ「未保存」にする（空クリックでは立てない）
+    state.dirty = true;
+    refresh();
+  }
+  positionDesignOverlay();
+  updateDesignBar();
+}
+
+function commitDesignMove(el, dx, dy, d) {
+  const c = designEntryFor(el, d);
+  const before = JSON.stringify(c.changes);
+  const v = { dx: Math.round(dx), dy: Math.round(dy) };
+  if (v.dx || v.dy) c.changes.move = v;
+  else delete c.changes.move;
+  finishDesignCommit(c, el, d, before);
+}
+
+function commitDesignSize(el, w, h, d) {
+  const c = designEntryFor(el, d);
+  const before = JSON.stringify(c.changes);
+  const v = {
+    widthPx: Math.round(w), heightPx: Math.round(h),
+    origWidthPx: c.origRect.w, origHeightPx: c.origRect.h,
+  };
+  if (v.widthPx === v.origWidthPx && v.heightPx === v.origHeightPx) delete c.changes.size;
+  else c.changes.size = v;
+  finishDesignCommit(c, el, d, before);
+}
+
+function commitFontStep(el, step, d) {
+  const c = designEntryFor(el, d);
+  const before = JSON.stringify(c.changes);
+  const cur = c.changes.font ? c.changes.font.scale : 1;
+  const next = Math.min(3, Math.max(0.5, Math.round((cur + step) * 10) / 10));
+  if (next === 1) delete c.changes.font;
+  else c.changes.font = { scale: next, origPx: c.origFontPx };
+  finishDesignCommit(c, el, d, before);
+}
+
+function designSummary(c) {
+  const parts = [];
+  const m = c.changes.move;
+  if (m && (m.dx || m.dy)) {
+    parts.push('移動 ' + [
+      m.dx ? (m.dx > 0 ? `右${m.dx}px` : `左${-m.dx}px`) : null,
+      m.dy ? (m.dy > 0 ? `下${m.dy}px` : `上${-m.dy}px`) : null,
+    ].filter(Boolean).join('・'));
+  }
+  const s = c.changes.size;
+  if (s) parts.push(`サイズ ${s.widthPx}×${s.heightPx}px（元 ${s.origWidthPx}×${s.origHeightPx}）`);
+  const f = c.changes.font;
+  if (f) parts.push(`文字 ${Math.round(f.scale * 100)}%`);
+  return parts.join(' ／ ') || '（変更なし）';
+}
+
+/* ---------- 選択枠（オーバーレイ）とツールバー ---------- */
+
+function ensureDesignOverlay(d) {
+  let ov = d.querySelector('.cr-design-overlay');
+  if (ov) return ov;
+  ov = d.createElement('div');
+  ov.className = 'cr-design-overlay';
+  const box = d.createElement('div');
+  box.className = 'cr-d-box';
+  ov.appendChild(box);
+  for (const k of ['nw', 'ne', 'sw', 'se']) {
+    const h = d.createElement('div');
+    h.className = 'cr-d-h ' + k;
+    h.dataset.corner = k;
+    ov.appendChild(h);
+  }
+  const bar = d.createElement('div');
+  bar.className = 'cr-d-bar';
+  const mkBtn = (label, title, fn) => {
+    const b = d.createElement('button');
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+    bar.appendChild(b);
+  };
+  mkBtn('A−', '文字を小さく', () => { if (state.designSel) commitFontStep(state.designSel, -0.1, d); });
+  const pct = d.createElement('span');
+  pct.className = 'cr-d-pct';
+  pct.textContent = '100%';
+  bar.appendChild(pct);
+  mkBtn('A＋', '文字を大きく', () => { if (state.designSel) commitFontStep(state.designSel, +0.1, d); });
+  mkBtn('⬆ 親', 'ひとまわり外側のブロックを選択', () => {
+    if (!state.designSel) return;
+    const p = designPickBlock(state.designSel.parentElement, d);
+    if (p) selectDesignEl(p);
+  });
+  mkBtn('↺ 戻す', 'この要素の調整をすべて取り消す', () => {
+    const el = state.designSel;
+    if (!el) return;
+    const c = el.dataset.crDesign ? state.comments.find((x) => x.id === el.dataset.crDesign) : null;
+    if (c) {
+      revertDesignEntry(c, d);
+      state.comments = state.comments.filter((x) => x.id !== c.id);
+      state.dirty = true;
+      refresh();
+    }
+    positionDesignOverlay();
+    updateDesignBar();
+  });
+  mkBtn('✕', '選択解除', () => selectDesignEl(null));
+  ov.appendChild(bar);
+  d.body.appendChild(ov);
+  return ov;
+}
+
+function positionDesignOverlay() {
+  const d = idoc();
+  if (!d) return;
+  const ov = d.querySelector('.cr-design-overlay');
+  if (!ov) return;
+  const el = state.designSel;
+  if (!el || !d.contains(el)) { ov.style.display = 'none'; return; }
+  const r = el.getBoundingClientRect();
+  ov.style.display = '';
+  ov.style.left = (r.left + iwin().scrollX) + 'px';
+  ov.style.top = (r.top + iwin().scrollY) + 'px';
+  ov.style.width = r.width + 'px';
+  ov.style.height = r.height + 'px';
+  const bar = ov.querySelector('.cr-d-bar');
+  if (bar) bar.style.top = (r.top < 60 ? (r.height + 10) : -46) + 'px';
+}
+
+function updateDesignBar() {
+  const d = idoc();
+  const pctEl = d && d.querySelector('.cr-d-pct');
+  if (!pctEl) return;
+  const el = state.designSel;
+  const c = el && el.dataset.crDesign ? state.comments.find((x) => x.id === el.dataset.crDesign) : null;
+  const scale = c && c.changes.font ? c.changes.font.scale : 1;
+  pctEl.textContent = Math.round(scale * 100) + '%';
+}
+
+function selectDesignEl(el) {
+  const d = idoc();
+  if (!d) return;
+  if (el && el.dataset.crDesign === undefined) {
+    // 調整済みのブロックと入れ子になる選択は不可（文字サイズ等の管理が衝突するため）
+    const anc = el.parentElement && el.parentElement.closest('[data-cr-design]');
+    const desc = el.querySelector && el.querySelector('[data-cr-design]');
+    if (anc || desc) {
+      toast('調整済みのブロックと重なる範囲は選べません。先にそのブロックの調整を「↺ 戻す」か、同じブロックを選択してください');
+      return;
+    }
+  }
+  state.designSel = el;
+  d.querySelectorAll('.cr-d-hover').forEach((x) => x.classList.remove('cr-d-hover'));
+  ensureDesignOverlay(d);
+  positionDesignOverlay();
+  updateDesignBar();
+}
+
+function toggleDesignMode() {
+  if (!state.fileName) return;
+  state.designMode = !state.designMode;
+  const d = idoc();
+  const btn = $('designBtn');
+  btn.classList.toggle('mode-on', state.designMode);
+  btn.textContent = state.designMode ? '✕ デザイン調整を終了' : '🎨 デザイン調整';
+  if (d) d.documentElement.classList.toggle('cr-design-active', state.designMode);
+  hideFloatBtn();
+  cancelComposer();
+  if (!state.designMode) {
+    state.designSel = null;
+    state.drag = null;
+    state.pickAtDown = null;
+    if (d) {
+      const ov = d.querySelector('.cr-design-overlay');
+      if (ov) ov.remove();
+      const bn = d.querySelector('.cr-design-banner');
+      if (bn) bn.remove();
+      d.querySelectorAll('.cr-d-hover').forEach((x) => x.classList.remove('cr-d-hover'));
+    }
+  } else {
+    if (d && !d.querySelector('.cr-design-banner')) {
+      // モード中であることの常時表示（クリックで終了できる）
+      const bn = d.createElement('div');
+      bn.className = 'cr-design-banner';
+      bn.addEventListener('click', (e) => { e.stopPropagation(); toggleDesignMode(); });
+      d.body.appendChild(bn);
+    }
+    toast('デザイン調整モード：ブロックをクリックで選択 → ドラッグで移動、四隅のハンドルでサイズ変更、A＋/A−で文字サイズ');
+  }
+}
+
+/* ---------- デザイン調整のマウス操作（iframe内・captureで先取り） ---------- */
+
+function onDesignMouseDown(e) {
+  if (!state.designMode) return;
+  const d = idoc();
+  if (e.target.closest && e.target.closest('.cr-d-bar')) return; // ボタンはclickで処理
+  const h = e.target.closest && e.target.closest('.cr-d-h');
+  const box = e.target.closest && e.target.closest('.cr-d-box');
+  if (h && state.designSel) {
+    const c = designEntryFor(state.designSel, d); // 変更前状態をここで確保
+    const r = state.designSel.getBoundingClientRect();
+    const m = c.changes.move || { dx: 0, dy: 0 };
+    state.drag = {
+      kind: h.dataset.corner, el: state.designSel, entryId: c.id,
+      startX: e.clientX, startY: e.clientY, baseW: r.width, baseH: r.height,
+      startLeft: r.left, startTop: r.top,
+      baseDx: m.dx, baseDy: m.dy, moved: false,
+    };
+    e.preventDefault();
+    e.stopPropagation();
+  } else if (box && state.designSel) {
+    const c = designEntryFor(state.designSel, d);
+    const m = c.changes.move || { dx: 0, dy: 0 };
+    state.drag = {
+      kind: 'move', el: state.designSel, entryId: c.id,
+      startX: e.clientX, startY: e.clientY, baseDx: m.dx, baseDy: m.dy, moved: false,
+    };
+    e.preventDefault();
+    e.stopPropagation();
+  } else if (!e.target.closest || !e.target.closest('.cr-design-overlay, .cr-design-banner')) {
+    // クリック選択用：mousedown時点の対象を控えておく
+    // （ドラッグでmouseupの位置がずれてもこの要素を選ぶ）
+    state.pickAtDown = designPickBlock(e.target, d);
+  }
+}
+
+function onDesignMouseMove(e) {
+  if (!state.designMode) return;
+  if (state.drag && e.buttons === 0) {
+    // iframeの外でマウスボタンが離された場合の保険：その場で確定する
+    onDesignMouseUp(e);
+    return;
+  }
+  if (!state.drag) { updateDesignHover(e); return; }
+  const g = state.drag;
+  const dx = e.clientX - g.startX;
+  const dy = e.clientY - g.startY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) g.moved = true;
+  if (!g.moved) return;
+  if (g.kind === 'move') {
+    setTranslate(g.el, g.baseDx + dx, g.baseDy + dy);
+  } else {
+    const sx = g.kind.includes('w') ? -1 : 1;
+    const sy = g.kind.includes('n') ? -1 : 1;
+    const w = Math.max(24, g.baseW + sx * dx);
+    const h = Math.max(24, g.baseH + sy * dy);
+    g.el.style.boxSizing = 'border-box'; // 実測サイズ＝指定サイズになるよう揃える
+    g.el.style.width = w + 'px';
+    g.el.style.height = h + 'px';
+    // 掴んだ角がカーソルに追従するよう、サイズ変更後の実際の位置を測って補正する
+    // （grid/flexでは幅の変更で要素自身のレイアウト位置も動くため、固定計算では足りない）
+    const desiredLeft = g.startLeft + (g.kind.includes('w') ? dx : 0);
+    const desiredTop = g.startTop + (g.kind.includes('n') ? dy : 0);
+    const curTx = g.lastTx !== undefined ? g.lastTx : g.baseDx;
+    const curTy = g.lastTy !== undefined ? g.lastTy : g.baseDy;
+    const r = g.el.getBoundingClientRect();
+    const tx = Math.round(desiredLeft - (r.left - curTx));
+    const ty = Math.round(desiredTop - (r.top - curTy));
+    setTranslate(g.el, tx, ty);
+    g.lastTx = tx;
+    g.lastTy = ty;
+  }
+  positionDesignOverlay();
+  e.preventDefault();
+}
+
+// ホバー中のブロックに「クリックで選ばれる範囲」の予告枠を表示
+function updateDesignHover(e) {
+  const d = idoc();
+  if (!d) return;
+  d.querySelectorAll('.cr-d-hover').forEach((x) => x.classList.remove('cr-d-hover'));
+  if (e.target.closest && e.target.closest('.cr-design-overlay, .cr-design-banner')) return;
+  const el = designPickBlock(e.target, d);
+  if (el && el !== state.designSel) el.classList.add('cr-d-hover');
+}
+
+function onDesignMouseUp(e) {
+  if (!state.designMode || !state.drag) return;
+  const g = state.drag;
+  state.drag = null;
+  const d = idoc();
+  const c = state.comments.find((x) => x.id === g.entryId);
+  if (!c) return;
+  if (!g.moved) {
+    // 動かさず離した→中立の空エントリなら掃除（dirtyは立てない）
+    finishDesignCommit(c, g.el, d, JSON.stringify(c.changes));
+    return;
+  }
+  const dx = e.clientX - g.startX;
+  const dy = e.clientY - g.startY;
+  if (g.kind === 'move') {
+    commitDesignMove(g.el, g.baseDx + dx, g.baseDy + dy, d);
+  } else {
+    // サイズ確定。位置補正はmousemoveで実測済みの値（lastTx/lastTy）を採用する
+    const before = JSON.stringify(c.changes);
+    const sx = g.kind.includes('w') ? -1 : 1;
+    const sy = g.kind.includes('n') ? -1 : 1;
+    const w = Math.max(24, g.baseW + sx * dx);
+    const h = Math.max(24, g.baseH + sy * dy);
+    const tx = g.lastTx !== undefined ? g.lastTx : g.baseDx;
+    const ty = g.lastTy !== undefined ? g.lastTy : g.baseDy;
+    const sizeV = {
+      widthPx: Math.round(w), heightPx: Math.round(h),
+      origWidthPx: c.origRect.w, origHeightPx: c.origRect.h,
+    };
+    if (sizeV.widthPx === sizeV.origWidthPx && sizeV.heightPx === sizeV.origHeightPx) delete c.changes.size;
+    else c.changes.size = sizeV;
+    const moveV = { dx: Math.round(tx), dy: Math.round(ty) };
+    if (moveV.dx || moveV.dy) c.changes.move = moveV;
+    else delete c.changes.move;
+    finishDesignCommit(c, g.el, d, before);
+  }
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function onDesignClick(e) {
+  if (!state.designMode) return;
+  // オーバーレイ内（ツールバーのボタン等）・バナーは各自のリスナーに任せる
+  if (e.target.closest && e.target.closest('.cr-design-overlay, .cr-design-banner')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const el = state.pickAtDown || designPickBlock(e.target, idoc());
+  state.pickAtDown = null;
+  selectDesignEl(el);
 }
 
 /* ============================================================
@@ -947,7 +1615,16 @@ function deleteComment(cid) {
   if (i === -1) return;
   if (!confirm('このコメントを削除しますか？')) return;
   const d = idoc();
-  if (d) unwrapComment(cid, d);
+  const target = state.comments[i];
+  if (d) {
+    if (target.type === 'design') {
+      revertDesignEntry(target, d);
+      positionDesignOverlay();
+      updateDesignBar();
+    } else {
+      unwrapComment(cid, d);
+    }
+  }
   state.comments.splice(i, 1);
   if (state.activeCid === cid) state.activeCid = null;
   state.dirty = true;
@@ -985,7 +1662,8 @@ function orderedComments() {
   }
   const anchored = order.map((cid) => selCmts.find((c) => c.id === cid)).filter(Boolean);
   const unanchored = selCmts.filter((c) => !anchored.includes(c));
-  return [...docCmts, ...anchored, ...unanchored];
+  const designCmts = state.comments.filter((c) => c.type === 'design');
+  return [...docCmts, ...anchored, ...unanchored, ...designCmts];
 }
 
 function refresh() {
@@ -1007,7 +1685,7 @@ function refresh() {
   const wrap = $('cmtList');
   wrap.innerHTML = '';
   for (const c of list) {
-    const num = c.type === 'document' ? '全体' : String(selList.indexOf(c) + 1);
+    const num = c.type === 'document' ? '全体' : (c.type === 'design' ? '🎨' : String(selList.indexOf(c) + 1));
     const card = document.createElement('div');
     card.className = 'cmt' + (state.activeCid === c.id ? ' active' : '');
     card.dataset.cid = c.id;
@@ -1015,21 +1693,27 @@ function refresh() {
     const top = document.createElement('div');
     top.className = 'top';
     const numEl = document.createElement('span');
-    numEl.className = 'num' + (c.type === 'document' ? ' doc' : (c.type === 'edit' ? ' edit' : ''));
+    numEl.className = 'num' + (c.type === 'document' ? ' doc' : (c.type === 'edit' ? ' edit' : (c.type === 'design' ? ' design' : '')));
     numEl.textContent = num;
     const secEl = document.createElement('span');
     secEl.className = 'sec';
-    secEl.textContent = c.type === 'document' ? '文書全体'
-      : (c.type === 'edit' ? '✏️ ' : '') + (c.section || '');
+    if (c.type === 'document') secEl.textContent = '文書全体';
+    else if (c.type === 'design') {
+      const t = c.target || {};
+      secEl.textContent = `${t.tag || ''}${t.classes ? '.' + t.classes.split(' ')[0] : ''}（${t.section || '位置情報なし'}）`;
+    } else secEl.textContent = (c.type === 'edit' ? '✏️ ' : '') + (c.section || '');
     const ops = document.createElement('span');
     ops.className = 'ops';
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '編集';
-    editBtn.addEventListener('click', (e) => { e.stopPropagation(); enterEdit(card, c); });
+    if (c.type !== 'design') {
+      const editBtn = document.createElement('button');
+      editBtn.textContent = '編集';
+      editBtn.addEventListener('click', (e) => { e.stopPropagation(); enterEdit(card, c); });
+      ops.appendChild(editBtn);
+    }
     const delBtn = document.createElement('button');
     delBtn.textContent = '削除';
     delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteComment(c.id); });
-    ops.append(editBtn, delBtn);
+    ops.appendChild(delBtn);
     top.append(numEl, secEl, ops);
     card.appendChild(top);
 
@@ -1039,16 +1723,29 @@ function refresh() {
       q.textContent = normText(c.quote);
       card.appendChild(q);
     }
+    if (c.type === 'design' && c.target && c.target.textHead) {
+      const q = document.createElement('div');
+      q.className = 'quote';
+      q.textContent = c.target.textHead;
+      card.appendChild(q);
+    }
 
     const body = document.createElement('div');
-    body.className = c.type === 'edit' ? 'body rep' : 'body';
-    body.textContent = c.type === 'edit' ? '→ ' + c.replacement : c.comment;
+    body.className = c.type === 'edit' ? 'body rep' : (c.type === 'design' ? 'body design' : 'body');
+    body.textContent = c.type === 'edit' ? '→ ' + c.replacement
+      : (c.type === 'design' ? designSummary(c) : c.comment);
     card.appendChild(body);
 
     if ((c.type === 'selection' || c.type === 'edit') && !c.anchored) {
       const w = document.createElement('div');
       w.className = 'warn';
       w.textContent = '⚠ 本文中の該当箇所をハイライトできませんでした（コメント自体は保存され、Claudeへの指示としては有効です）';
+      card.appendChild(w);
+    }
+    if (c.type === 'design' && !c.anchored) {
+      const w = document.createElement('div');
+      w.className = 'warn';
+      w.textContent = '⚠ 対象の要素を画面上で特定できませんでした（指示としては保存され、Claudeには伝わります）';
       card.appendChild(w);
     }
 
@@ -1107,10 +1804,21 @@ function selectComment(cid, opts = {}) {
   const d = idoc();
   if (d) {
     d.querySelectorAll('.cr-active').forEach((el) => el.classList.remove('cr-active'));
-    const marks = d.querySelectorAll(`[data-cid="${cid}"]`);
-    marks.forEach((m) => m.classList.add('cr-active'));
-    if (opts.scrollDoc && marks.length) {
-      marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const cmt = state.comments.find((x) => x.id === cid);
+    if (cmt && cmt.type === 'design') {
+      // デザイン調整カード：対象要素へスクロールして一瞬光らせる
+      const el = d.querySelector(`[data-cr-design="${cid}"]`);
+      if (el && opts.scrollDoc) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('cr-d-flash');
+        setTimeout(() => el.classList.remove('cr-d-flash'), 1200);
+      }
+    } else {
+      const marks = d.querySelectorAll(`[data-cid="${cid}"]`);
+      marks.forEach((m) => m.classList.add('cr-active'));
+      if (opts.scrollDoc && marks.length) {
+        marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   }
   document.querySelectorAll('.cmt').forEach((el) => {
@@ -1137,6 +1845,7 @@ function updateHeader() {
   }
   $('saveBtn').disabled = !state.fileName;
   $('docCmtBtn').disabled = !state.fileName;
+  $('designBtn').disabled = !state.fileName;
   $('scriptsToggleWrap').hidden = !state.fileName;
 }
 
@@ -1153,19 +1862,29 @@ function buildOutput() {
     sourceFile: baseName() + '.html',
     savedAt: new Date().toISOString(),
     note: 'HTMLコメントレビューアが埋め込んだ修正指示。処理手順とフィールドの意味は直前のHTMLコメント(CLAUDE-REVIEW-INSTRUCTIONS)を参照。no は画面上のコメント番号（本文中のバッジ番号）と対応。',
-    comments: ordered.map((c) => ({
-      // no は画面のバッジ番号と一致させる（本文に紐づくコメント・修正のみの連番。全体コメントは番号なし）
-      ...(c.type !== 'document' ? { no: sels.indexOf(c) + 1 } : {}),
-      type: c.type,
-      ...(c.type !== 'document' ? {
+    comments: ordered.map((c) => {
+      if (c.type === 'document') {
+        return { type: 'document', comment: c.comment, createdAt: c.createdAt };
+      }
+      if (c.type === 'design') {
+        const ch = {};
+        if (c.changes.move && (c.changes.move.dx || c.changes.move.dy)) ch.move = { dx: c.changes.move.dx, dy: c.changes.move.dy };
+        if (c.changes.size) ch.size = { ...c.changes.size };
+        if (c.changes.font) ch.font = { ...c.changes.font };
+        return { type: 'design', target: c.target, changes: ch, createdAt: c.createdAt };
+      }
+      // selection / edit：no は画面のバッジ番号と一致させる
+      const base = {
+        no: sels.indexOf(c) + 1,
+        type: c.type,
         quote: c.quote,
         prefix: c.prefix,
         suffix: c.suffix,
         section: c.section,
-      } : {}),
-      ...(c.type === 'edit' ? { replacement: c.replacement } : { comment: c.comment }),
-      createdAt: c.createdAt,
-    })),
+      };
+      if (c.type === 'edit') return { ...base, replacement: c.replacement, createdAt: c.createdAt };
+      return { ...base, comment: c.comment, createdAt: c.createdAt };
+    }),
   };
   // "<" をすべてエスケープして script 終了タグの誤検出を防ぐ
   const json = JSON.stringify(payload, null, 2).replace(/</g, '\\u003c');
@@ -1254,6 +1973,7 @@ $('fileInput').addEventListener('change', (e) => {
 });
 
 $('saveBtn').addEventListener('click', saveFile);
+$('designBtn').addEventListener('click', toggleDesignMode);
 $('docCmtBtn').addEventListener('click', () => beginComposer('document', null));
 $('composerAdd').addEventListener('click', submitComposer);
 $('composerCancel').addEventListener('click', cancelComposer);
@@ -1323,6 +2043,16 @@ window.__cr = {
     beginComposer('edit', range);
     $('composerText').value = replacement;
     submitComposer();
+  },
+  design: {
+    toggle: toggleDesignMode,
+    pick: designPickBlock,
+    select: selectDesignEl,
+    move: commitDesignMove,
+    size: commitDesignSize,
+    font: commitFontStep,
+    find: findDesignTarget,
+    summary: designSummary,
   },
   addDocumentComment: (text) => {
     beginComposer('document', null);
