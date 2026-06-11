@@ -255,7 +255,7 @@
       <li><b>HTML資料を開く</b>：「📂 HTMLを開く」かドラッグ＆ドロップ</li>
       <li><b>コメント・修正を付ける</b>：直したい文字を選択 → 「💬 コメント」で指示を書くか、「✏️ 直接修正」で修正後の文言を自分で入力（Wordの変更履歴のように記録され、Claudeが反映時にそのまま置き換えます）。文書全体への指示は「＋ 全体コメント」</li>
       <li><b>デザインを調整する</b>：「🎨 デザイン調整」を押してから、ブロックをクリックで選択。ドラッグで移動、四隅のハンドルでサイズ変更ができ、ツールバーのタブで細かく調整できます
-        — <b>文字</b>（フォント・大きさ・太字・下線・行間・字間・揃え）／<b>色・枠</b>（文字色・背景・外枠・角丸・影。色はパレットやスポイト🎯で選択）／<b>配置</b>（並べ替え・複製・削除・余白）。
+        — <b>文字</b>（フォント・大きさ・太字・下線・行間・字間・揃え）／<b>色・枠</b>（文字色・背景・外枠・角丸・影。色はパレットやスポイト🎯で選択）／<b>配置</b>（並べ替え・複製・削除・余白・行頭文字●✓・📝テキスト追加）。
         調整内容は指示として記録され、Claudeが反映時にレイアウトを壊さない自然な形で本実装します。もう一度ボタンを押すと通常モードに戻ります</li>
       <li><b>保存する</b>：「💾 コメント付きで保存」→ <b>「元の名前_コメント付き.html」</b>ができます（保存先を選ぶ画面が出た場合は選んだ場所に、出ない場合はダウンロードフォルダに入ります）</li>
       <li><b>Claudeに渡す</b>：そのファイルをClaude Codeのチャットにドラッグして、こう頼むだけ：</li>
@@ -320,6 +320,13 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
        opacity.value / padding.delta(内側余白の増減px)
      ・removed:true → この要素を削除する ／ duplicate.count → 直後に複製をn個追加
      ・reorder.shift → 兄弟要素の中で並び順をn個後ろへ（負は前へ）移動
+     ・bullet.style → 対象内の箇条書きの行頭記号を変更する
+       （none=記号なし, disc=●, circle=○, square=■, diamond=◆, check=✓,
+        arrow=➢, star=✦）。リストの既存のマーカー装飾はこの記号に置き換える
+     ・textbox{x,y,text} → target要素内の左上から(x,y)pxの位置に、textの内容の
+       テキスト要素を新規追加する。見た目（フォント・色等）は同エントリの他の
+       変更と文書のスタイルに合わせ、配置方法（絶対配置かレイアウト組み込みか）は
+       文書の設計に合うやり方でよい
      適用の規則: (1) designコメントが複数ある場合は comments 配列の順に適用する
      （特にreorderは先行エントリ適用後の並びを基準にした値）。
      (2) duplicate の複製は、同じエントリの他の変更（色・フォント等）を反映した
@@ -444,6 +451,49 @@ const IFRAME_CSS = `
   }
   /* 複製プレビューの目印 */
   .cr-clone { outline: 2px dashed rgba(67, 160, 71, 0.55); outline-offset: -2px; }
+
+  /* ===== 行頭文字（バレット）プレビュー =====
+     資料側の独自マーカー(::before装飾)を一旦ならして、選んだ記号に置き換える */
+  [data-cr-bullet] > li { list-style: none !important; }
+  [data-cr-bullet] > li::marker { content: "" !important; }
+  [data-cr-bullet] > li::before {
+    position: static !important; display: inline-block !important;
+    background: none !important; border: none !important; border-radius: 0 !important;
+    width: auto !important; height: auto !important; top: auto !important; left: auto !important;
+    margin: 0 0.45em 0 0 !important; color: inherit !important; opacity: 1 !important;
+    font-size: 0.85em !important; vertical-align: baseline !important;
+  }
+  [data-cr-bullet="none"] > li::before { content: "" !important; display: none !important; }
+  [data-cr-bullet="disc"] > li::before { content: "●" !important; }
+  [data-cr-bullet="circle"] > li::before { content: "○" !important; }
+  [data-cr-bullet="square"] > li::before { content: "■" !important; }
+  [data-cr-bullet="diamond"] > li::before { content: "◆" !important; }
+  [data-cr-bullet="check"] > li::before { content: "✓" !important; }
+  [data-cr-bullet="arrow"] > li::before { content: "➢" !important; }
+  [data-cr-bullet="star"] > li::before { content: "✦" !important; }
+
+  /* ===== テキストボックス ===== */
+  .cr-textbox {
+    position: absolute; z-index: 60; min-width: 40px; max-width: 60%;
+    background: rgba(255, 255, 255, 0.95); color: #1f2430;
+    border: 1px solid rgba(126, 87, 194, 0.7); border-radius: 6px;
+    padding: 6px 10px; font-size: 16px; line-height: 1.6;
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.15); cursor: default;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .cr-textbox:empty::before { content: "文字を入力…"; color: #9aa0aa; }
+  html.cr-design-active .cr-textbox { user-select: text !important; }
+  .cr-textbox[contenteditable="true"] { outline: 2px solid rgba(126, 87, 194, 0.9); cursor: text; }
+  .cr-design-overlay.cr-d-editing .cr-d-box { pointer-events: none; }
+  .cr-design-banner.placing { background: #1565c0; }
+  .cr-design-banner.placing::after { content: "📝 テキストを置きたい場所をクリックしてください（ここを押すと中止）"; }
+  .cr-d-bullets { display: flex; flex-wrap: wrap; gap: 5px; }
+  .cr-d-bullets button {
+    width: 34px; height: 34px; border: 1px solid rgba(255,255,255,0.35) !important;
+    border-radius: 7px; font-size: 15px; display: inline-flex;
+    align-items: center; justify-content: center; padding: 0 !important;
+  }
   .cr-design-overlay { position: absolute; z-index: 2147483600; pointer-events: none; }
   .cr-d-box {
     position: absolute; inset: 0; pointer-events: auto; cursor: move;
@@ -636,6 +686,16 @@ async function openFile(file) {
         if (c.changes.removed) ch.removed = true;
         if (c.changes.duplicate && +c.changes.duplicate.count > 0) ch.duplicate = { count: Math.round(+c.changes.duplicate.count) };
         if (c.changes.reorder && +c.changes.reorder.shift) ch.reorder = { shift: Math.round(+c.changes.reorder.shift) };
+        if (c.changes.bullet && ['none', 'disc', 'circle', 'square', 'diamond', 'check', 'arrow', 'star'].includes(c.changes.bullet.style)) {
+          ch.bullet = { style: c.changes.bullet.style };
+        }
+        if (c.changes.textbox && typeof c.changes.textbox.text === 'string' && c.changes.textbox.text) {
+          ch.textbox = {
+            x: Math.round(+c.changes.textbox.x) || 0,
+            y: Math.round(+c.changes.textbox.y) || 0,
+            text: c.changes.textbox.text,
+          };
+        }
         state.comments.push({
           id: 'c' + (state.nextId++),
           type: 'design',
@@ -715,6 +775,7 @@ function renderDoc() {
     state.drag = null;
     state.pickAtDown = null;
     state.sampling = null;
+    state.placing = false;
     docColorCache = null; // 資料の抽出色をリセット
     $('designBtn').classList.remove('mode-on');
     $('designBtn').textContent = '🎨 デザイン調整';
@@ -772,10 +833,18 @@ function setupIframe() {
   d.addEventListener('mousemove', onDesignMouseMove, true);
   d.addEventListener('mouseup', onDesignMouseUp, true);
   d.addEventListener('click', onDesignClick, true);
+  d.addEventListener('dblclick', onDesignDblClick, true);
   d.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.sampling) {
       cancelSampling(d);
       toast('色の採取を中止しました');
+    }
+    if (e.key === 'Escape' && state.placing) {
+      cancelPlacing(d);
+      toast('テキスト追加を中止しました');
+    }
+    if (e.key === 'Escape' && d.activeElement && d.activeElement.classList && d.activeElement.classList.contains('cr-textbox')) {
+      d.activeElement.blur();
     }
   });
   iwin().addEventListener('scroll', positionDesignOverlay, true);
@@ -808,6 +877,18 @@ function setupIframe() {
 
   // 既存コメントを本文に再アンカー
   for (const c of state.comments) {
+    if (c.type === 'design' && c.changes.textbox) {
+      // テキストボックス：基準要素を探して、その中に作り直す
+      const ref = findDesignTarget(c.target, d);
+      if (ref) {
+        const box = ensureTextbox(c, ref, d);
+        applyDesignEntry(c, box, d);
+        c.anchored = true;
+      } else {
+        c.anchored = false;
+      }
+      continue;
+    }
     if (c.type === 'design') {
       const el = findDesignTarget(c.target, d);
       if (el) {
@@ -847,7 +928,7 @@ function currentSelectionRange() {
   // （文書本来のテキストではないため、コメントや再修正は元の文言側に付けてもらう）
   const ca = r.commonAncestorContainer;
   const el = ca.nodeType === 1 ? ca : ca.parentElement;
-  if (el && el.closest && el.closest('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone')) return null;
+  if (el && el.closest && el.closest('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, .cr-textbox')) return null;
   return r;
 }
 
@@ -925,7 +1006,7 @@ function computeAnchorFromRange(range, d) {
     const textOfRange = (r) => {
       const frag = r.cloneContents();
       if (frag.querySelectorAll) {
-        frag.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, script, style').forEach((el) => el.remove());
+        frag.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, .cr-textbox, script, style').forEach((el) => el.remove());
       }
       return frag.textContent || '';
     };
@@ -973,8 +1054,8 @@ function buildTextIndex(d) {
   const walker = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
       const p = n.parentElement;
-      // .cr-ins（直接修正の新文言）やツールのUI要素・複製プレビューは文書本来のテキストではないので除外する
-      if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone')) return NodeFilter.FILTER_REJECT;
+      // .cr-ins（直接修正の新文言）やツールのUI要素・複製・テキストボックスは文書本来のテキストではないので除外する
+      if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone, .cr-textbox')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
@@ -1053,13 +1134,13 @@ function wrapRange(range, cid, d) {
   if (ca.nodeType === 3) {
     // 単一テキストノードの場合も除外規則（.cr-ins等）を適用する
     const p = ca.parentElement;
-    nodes = (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone')) ? [] : [ca];
+    nodes = (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone, .cr-textbox')) ? [] : [ca];
   } else {
     const walker = d.createTreeWalker(ca, NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
         if (!range.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
         const p = n.parentElement;
-        if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone')) return NodeFilter.FILTER_REJECT;
+        if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone, .cr-textbox')) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
     });
@@ -1155,6 +1236,9 @@ function clearTranslate(el) {
 // クリック位置から「選択対象のブロック」を決める（inline要素は親へ遡る）
 function designPickBlock(t, d) {
   let cur = t && t.nodeType === 1 ? t : (t ? t.parentElement : null);
+  // テキストボックス自体はそのまま選択対象（中の文字はダブルクリックで編集）
+  const tb = cur && cur.closest && cur.closest('.cr-textbox');
+  if (tb) return tb;
   while (cur && cur !== d.body && cur !== d.documentElement) {
     if (cur.closest('.cr-design-overlay, .cr-float, .cr-design-banner')) return null;
     if (cur.closest('.cr-clone')) { toast('複製のプレビューは直接操作できません（元のブロックを操作してください）'); return null; }
@@ -1177,9 +1261,9 @@ function designCssPath(el, d) {
     if (cls.length) part += '.' + cls.map((c) => CSS.escape(c)).join('.');
     const parent = cur.parentElement;
     if (parent) {
-      // クローン等のツール挿入要素は数えない（元ソースと一致する番号を保つ）
+      // クローン・テキストボックス等のツール挿入要素は数えない（元ソースと一致する番号を保つ）
       const same = [...parent.children].filter((ch) =>
-        ch.tagName === cur.tagName && !ch.classList.contains('cr-clone') && !/cr-design/.test(ch.className || ''));
+        ch.tagName === cur.tagName && ![...ch.classList].some((cl) => cl.startsWith('cr-')));
       if (same.length > 1) part += `:nth-of-type(${same.indexOf(cur) + 1})`;
     }
     parts.unshift(part);
@@ -1192,7 +1276,7 @@ function designCssPath(el, d) {
 function designTextHead(el) {
   const tmp = el.cloneNode(true);
   if (tmp.querySelectorAll) {
-    tmp.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, sup.cr-badge, script, style').forEach((x) => x.remove());
+    tmp.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, .cr-textbox, sup.cr-badge, script, style').forEach((x) => x.remove());
   }
   return normText(tmp.textContent).slice(0, 40);
 }
@@ -1350,6 +1434,129 @@ function applyPaddingDelta(el, delta) {
   sides.forEach((p, i) => el.style.setProperty(p, Math.max(0, base[i] + delta) + 'px'));
 }
 
+/* ---------- 行頭文字（バレット） ---------- */
+
+const BULLET_STYLES = [
+  { key: 'none', glyph: 'なし' },
+  { key: 'disc', glyph: '●' },
+  { key: 'circle', glyph: '○' },
+  { key: 'square', glyph: '■' },
+  { key: 'diamond', glyph: '◆' },
+  { key: 'check', glyph: '✓' },
+  { key: 'arrow', glyph: '➢' },
+  { key: 'star', glyph: '✦' },
+];
+
+// 選択ブロック内のリスト(ul/ol)を集める
+function bulletTargets(el) {
+  const lists = [];
+  if (el.matches && el.matches('ul, ol')) lists.push(el);
+  else if (el.matches && el.matches('li')) {
+    const L = el.closest('ul, ol');
+    if (L) lists.push(L);
+  }
+  if (el.querySelectorAll) {
+    el.querySelectorAll('ul, ol').forEach((L) => {
+      if (!L.closest('.cr-clone') && !lists.includes(L)) lists.push(L);
+    });
+  }
+  return lists;
+}
+
+// 行頭文字の適用（styleがnull/undefinedで解除）
+function applyBullet(el, style) {
+  if (el.removeAttribute) el.removeAttribute('data-cr-bullet');
+  if (el.querySelectorAll) el.querySelectorAll('[data-cr-bullet]').forEach((L) => L.removeAttribute('data-cr-bullet'));
+  if (!style) return;
+  bulletTargets(el).forEach((L) => L.setAttribute('data-cr-bullet', style));
+}
+
+/* ---------- テキストボックス ---------- */
+
+function attachTextboxEvents(box, d) {
+  box.addEventListener('input', () => { state.dirty = true; });
+  box.addEventListener('blur', () => {
+    box.contentEditable = 'false';
+    const ov = d.querySelector('.cr-design-overlay');
+    if (ov) ov.classList.remove('cr-d-editing');
+    const c = state.comments.find((x) => x.id === box.dataset.crDesign);
+    if (!c || !c.changes.textbox) return;
+    const text = (box.textContent || '').trim();
+    if (!text) {
+      // 空のまま確定 → ボックスごと取り消す
+      box.remove();
+      state.comments = state.comments.filter((x) => x.id !== c.id);
+      if (state.designSel === box) selectDesignEl(null);
+      refresh();
+      positionDesignOverlay();
+      return;
+    }
+    if (text !== c.changes.textbox.text) {
+      c.changes.textbox.text = text;
+      state.dirty = true;
+    }
+    refresh();
+  });
+}
+
+// テキストボックス要素を（無ければ作って）基準要素内の指定位置に置く
+function ensureTextbox(c, ref, d) {
+  let box = d.querySelector(`.cr-textbox[data-cr-design="${c.id}"]`);
+  if (!box) {
+    box = d.createElement('div');
+    box.className = 'cr-textbox';
+    box.dataset.crDesign = c.id;
+    box.textContent = c.changes.textbox.text || '';
+    attachTextboxEvents(box, d);
+    ref.appendChild(box);
+  }
+  // 基準要素を位置決めの基点にする
+  if (getComputedStyle(ref).position === 'static') ref.style.position = 'relative';
+  box.style.left = c.changes.textbox.x + 'px';
+  box.style.top = c.changes.textbox.y + 'px';
+  return box;
+}
+
+// 新しいテキストボックスのエントリを作成（プレース操作・テスト用）
+function createTextboxEntry(ref, x, y, text, d) {
+  const c = {
+    id: 'c' + (state.nextId++),
+    type: 'design',
+    target: describeDesignTarget(ref, d),
+    changes: { textbox: { x: Math.round(x), y: Math.round(y), text: text || '' } },
+    origRect: null,
+    origFontPx: null,
+    createdAt: new Date().toISOString(),
+    anchored: true,
+  };
+  state.comments.push(c);
+  const box = ensureTextbox(c, ref, d);
+  state.dirty = true;
+  refresh();
+  return box;
+}
+
+// テキストボックスの文字編集モードに入る
+function editTextbox(box, d) {
+  box.contentEditable = 'true';
+  const ov = d.querySelector('.cr-design-overlay');
+  if (ov) ov.classList.add('cr-d-editing');
+  box.focus();
+  const sel = iwin().getSelection();
+  if (sel) {
+    const r = d.createRange();
+    r.selectNodeContents(box);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+}
+
+function cancelPlacing(d) {
+  state.placing = false;
+  const bn = d && d.querySelector('.cr-design-banner');
+  if (bn) bn.classList.remove('placing');
+}
+
 // 影・フォントのプリセット定義
 const SHADOW_PRESETS = {
   none: '',
@@ -1463,6 +1670,15 @@ function applyDesignEntry(c, el, d) {
   // --- 余白 ---
   applyPaddingDelta(el, ch.padding ? ch.padding.delta : 0);
 
+  // --- 行頭文字 ---
+  applyBullet(el, ch.bullet ? ch.bullet.style : null);
+
+  // --- テキストボックス（自前要素）の基本配置：style再構築で消えるため再設定 ---
+  if (ch.textbox && el.classList.contains('cr-textbox')) {
+    el.style.left = ch.textbox.x + 'px';
+    el.style.top = ch.textbox.y + 'px';
+  }
+
   // --- 削除（プレビュー：モード中は半透明、通常時は非表示。CSSが切替） ---
   if (ch.removed) el.dataset.crRemoved = '1';
   else delete el.dataset.crRemoved;
@@ -1519,8 +1735,16 @@ function applyReorder(el, shift) {
 
 // エントリの取り消し：要素を変更前の状態に戻す
 function revertDesignEntry(c, d) {
+  // テキストボックスは自前要素なので、取り除くだけでよい
+  if (c.changes.textbox) {
+    const box = d.querySelector(`.cr-textbox[data-cr-design="${c.id}"]`);
+    if (box) box.remove();
+    return;
+  }
   const el = d.querySelector(`[data-cr-design="${c.id}"]`);
   if (!el) return;
+  // 行頭文字を解除
+  applyBullet(el, null);
   // 並べ替えを元に戻す
   if (c.changes.reorder && c.changes.reorder.shift) applyReorder(el, -c.changes.reorder.shift);
   // クローンを撤去
@@ -1646,6 +1870,11 @@ function commitFontStep(el, step, d) {
 function designSummary(c) {
   const ch = c.changes;
   const parts = [];
+  if (ch.textbox) parts.push(`📝 テキスト追加「${normText(ch.textbox.text).slice(0, 24) || '（未入力）'}」`);
+  if (ch.bullet) {
+    const g = BULLET_STYLES.find((b) => b.key === ch.bullet.style);
+    parts.push('行頭記号 ' + (g ? g.glyph : ch.bullet.style));
+  }
   if (ch.removed) parts.push('🗑 このブロックを削除');
   if (ch.duplicate) parts.push(`⧉ 複製×${ch.duplicate.count}`);
   if (ch.reorder) parts.push(`並び順 ${ch.reorder.shift > 0 ? `${ch.reorder.shift}つ後ろへ` : `${-ch.reorder.shift}つ前へ`}`);
@@ -1865,9 +2094,70 @@ function buildDesignPanel(d) {
   }, 'removed'));
   rowL.appendChild(sep());
   stepper(rowL, '余白−', '余白＋', 'padding', 'pad', '内側の余白');
+  rowL.appendChild(sep());
+  rowL.appendChild(mk('行頭 ▾', '箇条書きの行頭文字を変更（●○■◆✓など）', () => openBulletPanel(d), 'bulletbtn'));
+  rowL.appendChild(mk('📝 テキスト追加', 'クリックした場所に新しいテキストを追加する', () => {
+    state.placing = true;
+    const bn = d.querySelector('.cr-design-banner');
+    if (bn) bn.classList.add('placing');
+    closeColorPanel(d);
+    toast('テキストを置きたい場所をクリックしてください（Escで中止）');
+  }));
   bar.appendChild(rowL);
 
   return bar;
+}
+
+/* ---------- 行頭文字パネル（Wordの行頭文字ライブラリ風） ---------- */
+
+function openBulletPanel(d) {
+  closeColorPanel(d);
+  const el = state.designSel;
+  if (!el) return;
+  if (!el.classList.contains('cr-textbox') && !bulletTargets(el).length) {
+    toast('選択中のブロックに箇条書き（リスト）が見つかりません。リストを含むブロックを選択してください');
+    return;
+  }
+  const ov = d.querySelector('.cr-design-overlay');
+  const bar = ov && ov.querySelector('.cr-d-bar');
+  if (!bar) return;
+  const pop = d.createElement('div');
+  pop.className = 'cr-d-pop';
+  pop.addEventListener('mousedown', (e) => e.stopPropagation());
+  const title = d.createElement('div');
+  title.className = 'cr-d-pop-title';
+  title.textContent = '行頭文字ライブラリ';
+  pop.appendChild(title);
+  const grid = d.createElement('div');
+  grid.className = 'cr-d-bullets';
+  const c = designEntryOf(el);
+  for (const b of BULLET_STYLES) {
+    const btn = d.createElement('button');
+    btn.textContent = b.glyph;
+    btn.title = b.key === 'none' ? '行頭の記号を無くす' : `行頭文字を ${b.glyph} にする`;
+    if (c && c.changes.bullet && c.changes.bullet.style === b.key) btn.classList.add('on');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      commitDesignField(el, 'bullet', { style: b.key }, d);
+      closeColorPanel(d);
+    });
+    grid.appendChild(btn);
+  }
+  pop.appendChild(grid);
+  const tools = d.createElement('div');
+  tools.className = 'cr-d-pop-tools';
+  const resetBtn = d.createElement('button');
+  resetBtn.textContent = '解除（元の行頭に戻す）';
+  resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    commitDesignField(el, 'bullet', null, d);
+    closeColorPanel(d);
+  });
+  tools.appendChild(resetBtn);
+  pop.appendChild(tools);
+  ov.appendChild(pop);
+  pop.style.top = (parseFloat(bar.style.top || '0') + bar.offsetHeight + 6) + 'px';
+  positionDesignOverlay();
 }
 
 function updateDesignTab(d) {
@@ -1968,6 +2258,9 @@ function updateDesignBar() {
   setOn('dup', dupCount > 0);
   setOn('removed', !!ch.removed);
   setVal('pad', '余白' + (ch.padding ? (ch.padding.delta > 0 ? '+' : '') + ch.padding.delta + 'px' : '±0'));
+  const blt = ch.bullet ? BULLET_STYLES.find((b) => b.key === ch.bullet.style) : null;
+  setVal('bulletbtn', '行頭' + (blt ? '：' + blt.glyph : '') + ' ▾');
+  setOn('bulletbtn', !!ch.bullet);
 
   updateDesignTab(d);
 }
@@ -2215,8 +2508,9 @@ function selectDesignEl(el) {
   if (!d) return;
   if (el && el.dataset.crDesign === undefined) {
     // 調整済みのブロックと入れ子になる選択は不可（文字サイズ等の管理が衝突するため）
-    const anc = el.parentElement && el.parentElement.closest('[data-cr-design]');
-    const desc = el.querySelector && el.querySelector('[data-cr-design]');
+    // ※テキストボックスは自前要素なので衝突しない（除外）
+    const anc = el.parentElement && el.parentElement.closest('[data-cr-design]:not(.cr-textbox)');
+    const desc = el.querySelector && el.querySelector('[data-cr-design]:not(.cr-textbox)');
     if (anc || desc) {
       toast('調整済みのブロックと重なる範囲は選べません。先にそのブロックの調整を「↺ 戻す」か、同じブロックを選択してください');
       return;
@@ -2245,6 +2539,10 @@ function toggleDesignMode() {
     state.drag = null;
     state.pickAtDown = null;
     state.sampling = null;
+    state.placing = false;
+    if (d && d.activeElement && d.activeElement.classList && d.activeElement.classList.contains('cr-textbox')) {
+      d.activeElement.blur(); // 編集途中のテキストを確定
+    }
     if (d) {
       const ov = d.querySelector('.cr-design-overlay');
       if (ov) ov.remove();
@@ -2265,6 +2563,27 @@ function toggleDesignMode() {
 }
 
 /* ---------- デザイン調整のマウス操作（iframe内・captureで先取り） ---------- */
+
+// ダブルクリック：テキストボックスの文字編集に入る
+function onDesignDblClick(e) {
+  if (!state.designMode) return;
+  const d = idoc();
+  const tb = e.target.closest && e.target.closest('.cr-textbox');
+  if (tb) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectDesignEl(tb);
+    editTextbox(tb, d);
+    return;
+  }
+  // 選択中のテキストボックスの上（オーバーレイ越し）でのダブルクリック
+  if (e.target.closest && e.target.closest('.cr-d-box') &&
+      state.designSel && state.designSel.classList.contains('cr-textbox')) {
+    e.preventDefault();
+    e.stopPropagation();
+    editTextbox(state.designSel, d);
+  }
+}
 
 function onDesignMouseDown(e) {
   if (!state.designMode) return;
@@ -2394,6 +2713,26 @@ function onDesignMouseUp(e) {
 function onDesignClick(e) {
   if (!state.designMode) return;
   const d = idoc();
+  // テキスト配置モード：クリックした場所にテキストボックスを作る
+  if (state.placing) {
+    e.preventDefault();
+    e.stopPropagation();
+    const t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (t && t.closest && t.closest('.cr-design-banner')) {
+      cancelPlacing(d);
+      toast('テキスト追加を中止しました');
+      return;
+    }
+    if (t && t.closest && t.closest('.cr-design-overlay')) return;
+    cancelPlacing(d);
+    let ref = designPickBlock(e.target, d) || d.body;
+    if (ref.classList && ref.classList.contains('cr-textbox')) ref = ref.parentElement || d.body;
+    const rr = ref.getBoundingClientRect();
+    const box = createTextboxEntry(ref, e.clientX - rr.left, e.clientY - rr.top, '', d);
+    selectDesignEl(box);
+    editTextbox(box, d);
+    return;
+  }
   // スポイト採取モード：クリックした場所の色を拾う
   if (state.sampling) {
     e.preventDefault();
@@ -2951,6 +3290,8 @@ window.__cr = {
     reorder: commitDesignReorder,
     colors: extractDocColors,
     pickColor: applyPickedColor,
+    bullet: (el, style) => commitDesignField(el, 'bullet', style ? { style } : null, idoc()),
+    addTextbox: (ref, x, y, text) => createTextboxEntry(ref, x, y, text, idoc()),
     find: findDesignTarget,
     summary: designSummary,
     entryOf: designEntryOf,
