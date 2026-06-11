@@ -525,6 +525,11 @@ function setupIframe() {
     toast('この環境では資料の中身にアクセスできませんでした。ツールのHTMLファイルをパソコンに保存して、ダブルクリックで開き直してから資料を読み込んでください');
     return;
   }
+  if (!d.body || d.body.tagName === 'FRAMESET') {
+    // frameset等、本文(body)を持たない特殊なHTML（document.bodyはframesetも返す）
+    toast('この形式のHTML（本文のないフレーム構成など）には対応していません');
+    return;
+  }
   // スタイル注入
   const st = d.createElement('style');
   st.textContent = IFRAME_CSS;
@@ -1257,8 +1262,17 @@ $('composerText').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') cancelComposer();
 });
 
-$('helpBtn').addEventListener('click', () => $('helpDlg').showModal());
-$('helpClose').addEventListener('click', () => $('helpDlg').close());
+// dialog要素未対応の古いブラウザでは、open属性での簡易表示にフォールバック
+$('helpBtn').addEventListener('click', () => {
+  const dlg = $('helpDlg');
+  if (typeof dlg.showModal === 'function') dlg.showModal();
+  else dlg.setAttribute('open', '');
+});
+$('helpClose').addEventListener('click', () => {
+  const dlg = $('helpDlg');
+  if (typeof dlg.close === 'function') dlg.close();
+  else dlg.removeAttribute('open');
+});
 
 $('scriptsToggle').addEventListener('change', async () => {
   if (!state.fileName) return;
