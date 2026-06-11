@@ -308,8 +308,10 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
      ・size.widthPx/heightPx: 変更後の実測サイズ（origWidthPx/origHeightPxが変更前。
        比率に換算して % や fr 等で表現してよい）
      ・font.scale: 文字サイズの倍率（origPx=変更前の実測px）
-     ・fontFamily.label/stack: フォント変更（明朝/ゴシック等。stackは参考。文書の
-       既存フォント指定の方式に合わせて反映）
+     ・fontFamily.label/stack: フォント変更。stackを参考に、文書の既存フォント指定の
+       方式に合わせて反映する。webfont がある場合は Google Fonts の読み込み
+       （https://fonts.googleapis.com/css2?family=<webfont>&display=swap）を
+       <head> に追加した上で適用する
      ・fontWeight("bold") / fontStyle("italic") / textDecoration("underline"等) /
        textAlign("left|center|right")
      ・lineHeight.scale: 行間の倍率 ／ letterSpacing.em: 字間（em単位）
@@ -490,6 +492,18 @@ const IFRAME_CSS = `
     width: 248px; pointer-events: auto; background: #23272e; border-radius: 12px;
     padding: 10px 12px; box-shadow: 0 10px 34px rgba(0,0,0,0.45);
     font-family: -apple-system, "Hiragino Sans", sans-serif;
+    max-height: 340px; overflow-y: auto;
+  }
+  .cr-d-font {
+    display: block; width: 100%; text-align: left; appearance: none; border: 0;
+    background: none; color: #fff; font-size: 13.5px; line-height: 1.5;
+    padding: 5px 8px; border-radius: 7px; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cr-d-font:hover { background: #7e57c2; }
+  .cr-d-pop-tools input[type="text"] {
+    flex: 1; min-width: 0; border-radius: 7px; border: 1px solid rgba(255,255,255,0.3);
+    background: #181b20; color: #fff; font-size: 12px; padding: 5px 8px;
   }
   .cr-d-pop-title { color: #fff; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
   .cr-d-pop-label { color: #aab0ba; font-size: 10.5px; margin: 7px 0 3px; }
@@ -592,7 +606,11 @@ async function openFile(file) {
         // 拡張スタイル
         const isHex = (v) => typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v);
         if (c.changes.fontFamily && c.changes.fontFamily.stack) {
-          ch.fontFamily = { key: c.changes.fontFamily.key || '', label: c.changes.fontFamily.label || '', stack: String(c.changes.fontFamily.stack) };
+          ch.fontFamily = {
+            label: c.changes.fontFamily.label || '',
+            stack: String(c.changes.fontFamily.stack),
+            ...(c.changes.fontFamily.webfont ? { webfont: String(c.changes.fontFamily.webfont) } : {}),
+          };
         }
         if (c.changes.fontWeight) ch.fontWeight = String(c.changes.fontWeight);
         if (c.changes.fontStyle) ch.fontStyle = String(c.changes.fontStyle);
@@ -1338,12 +1356,65 @@ const SHADOW_PRESETS = {
   soft: '0 4px 14px rgba(0,0,0,0.18)',
   strong: '0 10px 30px rgba(0,0,0,0.35)',
 };
-const FONT_PRESETS = [
-  { key: 'mincho', label: '明朝', stack: '"Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif' },
-  { key: 'gothic', label: 'ゴシック', stack: '"Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", Meiryo, sans-serif' },
-  { key: 'maru', label: '丸ゴシック', stack: '"Hiragino Maru Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif' },
-  { key: 'mono', label: '等幅', stack: '"SF Mono", Menlo, Consolas, "MS Gothic", monospace' },
+// フォント一覧。「定番」は閲覧者のPCに入っているフォント（入っていなければ代替表示）、
+// 「Webフォント」はGoogle Fonts読み込みでどのPCでも同じ表示になるもの
+const FONT_GROUPS = [
+  {
+    label: '定番フォント（パソコンのフォント）',
+    fonts: [
+      { label: '游ゴシック', stack: '"Yu Gothic", YuGothic, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif' },
+      { label: '游明朝', stack: '"Yu Mincho", YuMincho, "Hiragino Mincho ProN", serif' },
+      { label: 'メイリオ', stack: 'Meiryo, "Hiragino Kaku Gothic ProN", sans-serif' },
+      { label: 'Meiryo UI', stack: '"Meiryo UI", Meiryo, "Hiragino Kaku Gothic ProN", sans-serif' },
+      { label: 'ヒラギノ角ゴ', stack: '"Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif' },
+      { label: 'ヒラギノ明朝', stack: '"Hiragino Mincho ProN", "Yu Mincho", serif' },
+      { label: '丸ゴシック', stack: '"Hiragino Maru Gothic ProN", "HG丸ｺﾞｼｯｸM-PRO", "Yu Gothic", sans-serif' },
+      { label: 'MS Pゴシック', stack: '"MS PGothic", "Hiragino Kaku Gothic ProN", sans-serif' },
+      { label: 'MS P明朝', stack: '"MS PMincho", "Hiragino Mincho ProN", serif' },
+      { label: 'BIZ UDPゴシック', stack: '"BIZ UDPGothic", Meiryo, "Hiragino Kaku Gothic ProN", sans-serif' },
+      { label: '等幅', stack: '"SF Mono", Menlo, Consolas, "MS Gothic", monospace' },
+    ],
+  },
+  {
+    label: 'Webフォント（どのパソコンでも同じ表示）',
+    fonts: [
+      { label: 'Noto Sans JP', stack: '"Noto Sans JP", sans-serif', webfont: 'Noto+Sans+JP' },
+      { label: 'Noto Serif JP', stack: '"Noto Serif JP", serif', webfont: 'Noto+Serif+JP' },
+      { label: 'M PLUS Rounded 1c（丸ゴ）', stack: '"M PLUS Rounded 1c", sans-serif', webfont: 'M+PLUS+Rounded+1c' },
+      { label: 'Zen Kaku Gothic New', stack: '"Zen Kaku Gothic New", sans-serif', webfont: 'Zen+Kaku+Gothic+New' },
+      { label: 'しっぽり明朝', stack: '"Shippori Mincho", serif', webfont: 'Shippori+Mincho' },
+    ],
+  },
 ];
+
+// Webフォントをプレビュー用にiframeへ読み込む（保存ソースには影響しない）
+function ensureWebfont(d, family) {
+  const id = 'cr-webfont-' + family.replace(/[^\w-]/g, '');
+  if (d.getElementById(id)) return;
+  const link = d.createElement('link');
+  link.id = id;
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=' + family + ':wght@400;500;700&display=swap';
+  (d.head || d.documentElement).appendChild(link);
+}
+
+// 資料で使われているフォントを抽出（先頭ファミリー名で集計）
+function extractDocFonts(d) {
+  const counts = new Map();
+  const els = d.body.querySelectorAll('*');
+  for (let i = 0; i < els.length && i < 2000; i++) {
+    const t = els[i];
+    if (t.closest('.cr-design-overlay, .cr-design-banner, .cr-float, .cr-clone')) continue;
+    if (!t.textContent || !t.textContent.trim()) continue;
+    const fam = getComputedStyle(t).fontFamily;
+    if (!fam) continue;
+    const first = fam.split(',')[0].trim().replace(/^["']|["']$/g, '');
+    if (!counts.has(first)) counts.set(first, { n: 0, stack: fam });
+    counts.get(first).n++;
+  }
+  return [...counts.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 5)
+    .map(([label, v]) => ({ label, stack: v.stack }));
+}
 
 // エントリの内容を要素のスタイルに反映。
 // インラインstyleは毎回「変更前の状態」から再構築する（shorthand/longhandの
@@ -1369,6 +1440,7 @@ function applyDesignEntry(c, el, d) {
   // --- 文字（サブツリー適用系） ---
   applyFontScale(el, ch.font ? ch.font.scale : 1, d);
   applyLineHeightScale(el, ch.lineHeight ? ch.lineHeight.scale : 1, ch.font ? ch.font.scale : 1);
+  if (ch.fontFamily && ch.fontFamily.webfont) ensureWebfont(d, ch.fontFamily.webfont);
   applySubtreeConst(el, 'font-family', 'crOff', ch.fontFamily ? ch.fontFamily.stack : null);
   applySubtreeConst(el, 'font-weight', 'crOfw', ch.fontWeight || null);
   applySubtreeConst(el, 'color', 'crOco', ch.color ? ch.color.value : null);
@@ -1683,25 +1755,18 @@ function buildDesignPanel(d) {
   const rowT = d.createElement('div');
   rowT.className = 'cr-d-row';
   rowT.dataset.tab = 'text';
-  for (const f of FONT_PRESETS) {
-    rowT.appendChild(mk(f.label, `フォントを${f.label}に（もう一度押すと元に戻す）`, () => {
-      const el = elNow(); if (!el) return;
-      const c = designEntryOf(el);
-      const cur = c && c.changes.fontFamily ? c.changes.fontFamily.key : null;
-      commitDesignField(el, 'fontFamily', cur === f.key ? null : { key: f.key, label: f.label, stack: f.stack }, d);
-    }, 'font-' + f.key));
-  }
+  rowT.appendChild(mk('フォント ▾', 'フォントを選ぶ（定番・Webフォント・自由入力）', () => openFontPanel(d), 'fontbtn'));
   rowT.appendChild(sep());
   rowT.appendChild(mk('A−', '文字を小さく', () => elNow() && commitFontStep(elNow(), -0.1, d)));
   rowT.appendChild(val('pct', '100%'));
   rowT.appendChild(mk('A＋', '文字を大きく', () => elNow() && commitFontStep(elNow(), +0.1, d)));
   rowT.appendChild(sep());
-  rowT.appendChild(mk('B', '太字', () => {
+  rowT.appendChild(mk('太字', '太字にする（もう一度押すと解除）', () => {
     const el = elNow(); if (!el) return;
     const c = designEntryOf(el);
     commitDesignField(el, 'fontWeight', c && c.changes.fontWeight ? null : 'bold', d);
   }, 'bold'));
-  rowT.appendChild(mk('I', '斜体', () => {
+  rowT.appendChild(mk('斜体', '斜体にする（もう一度押すと解除）', () => {
     const el = elNow(); if (!el) return;
     const c = designEntryOf(el);
     commitDesignField(el, 'fontStyle', c && c.changes.fontStyle ? null : 'italic', d);
@@ -1713,8 +1778,8 @@ function buildDesignPanel(d) {
     if (parts.has(kind)) parts.delete(kind); else parts.add(kind);
     commitDesignField(el, 'textDecoration', [...parts].join(' ') || null, d);
   };
-  rowT.appendChild(mk('U', '下線', () => decoToggle('underline'), 'underline'));
-  rowT.appendChild(mk('S', '取り消し線', () => decoToggle('line-through'), 'line-through'));
+  rowT.appendChild(mk('下線', 'アンダーラインを引く（もう一度押すと解除）', () => decoToggle('underline'), 'underline'));
+  rowT.appendChild(mk('取消線', '取り消し線を引く（もう一度押すと解除）', () => decoToggle('line-through'), 'line-through'));
   rowT.appendChild(sep());
   stepper(rowT, '行間−', '行間＋', 'lineHeight', 'lh', '行間');
   stepper(rowT, '字間−', '字間＋', 'letterSpacing', 'ls', '字間');
@@ -1872,7 +1937,8 @@ function updateDesignBar() {
 
   // 文字タブ
   setVal('pct', Math.round((ch.font ? ch.font.scale : 1) * 100) + '%');
-  for (const f of FONT_PRESETS) setOn('font-' + f.key, ch.fontFamily && ch.fontFamily.key === f.key);
+  setVal('fontbtn', 'フォント：' + (ch.fontFamily ? ch.fontFamily.label : '元のまま') + ' ▾');
+  setOn('fontbtn', !!ch.fontFamily);
   setOn('bold', !!ch.fontWeight);
   setOn('italic', !!ch.fontStyle);
   const deco = ch.textDecoration || '';
@@ -2063,6 +2129,85 @@ function openColorPanel(d, field) {
   ov.appendChild(pop);
   // パネルの位置：ツールバーの下
   pop.style.top = (parseFloat(bar.style.top || '0') + bar.offsetHeight + 6) + 'px';
+  positionDesignOverlay();
+}
+
+/* ---------- フォント選択パネル ---------- */
+
+function openFontPanel(d) {
+  closeColorPanel(d); // .cr-d-popは共用なので既存パネルを閉じる
+  const ov = d.querySelector('.cr-design-overlay');
+  const bar = ov && ov.querySelector('.cr-d-bar');
+  if (!bar) return;
+  const pop = d.createElement('div');
+  pop.className = 'cr-d-pop';
+  pop.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  const title = d.createElement('div');
+  title.className = 'cr-d-pop-title';
+  title.textContent = 'フォントを選ぶ';
+  pop.appendChild(title);
+
+  const pickFont = (f) => {
+    const el = state.designSel;
+    if (!el) return;
+    if (f.webfont) ensureWebfont(d, f.webfont);
+    commitDesignField(el, 'fontFamily', {
+      label: f.label, stack: f.stack, ...(f.webfont ? { webfont: f.webfont } : {}),
+    }, d);
+    closeColorPanel(d);
+  };
+  const addGroup = (label, fonts) => {
+    if (!fonts || !fonts.length) return;
+    const lab = d.createElement('div');
+    lab.className = 'cr-d-pop-label';
+    lab.textContent = label;
+    pop.appendChild(lab);
+    for (const f of fonts) {
+      const b = d.createElement('button');
+      b.className = 'cr-d-font';
+      b.textContent = f.label + '　あア亜 Aa1';
+      b.style.fontFamily = f.stack; // 項目自体をそのフォントで表示（見本を兼ねる）
+      b.title = f.webfont ? 'Webフォント：反映時に読み込み設定も追加されます' : f.stack;
+      b.addEventListener('click', (e) => { e.stopPropagation(); pickFont(f); });
+      pop.appendChild(b);
+    }
+  };
+  addGroup('この資料で使われているフォント', extractDocFonts(d));
+  for (const g of FONT_GROUPS) addGroup(g.label, g.fonts);
+
+  // 自由入力＋解除
+  const tools = d.createElement('div');
+  tools.className = 'cr-d-pop-tools';
+  const inp = d.createElement('input');
+  inp.type = 'text';
+  inp.placeholder = 'フォント名を入力（例: Meiryo UI）';
+  inp.addEventListener('click', (e) => e.stopPropagation());
+  const applyFree = () => {
+    const name = inp.value.trim();
+    if (!name) return;
+    pickFont({ label: name, stack: `"${name.replace(/["']/g, '')}", sans-serif` });
+  };
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFree(); });
+  tools.appendChild(inp);
+  const okBtn = d.createElement('button');
+  okBtn.textContent = '適用';
+  okBtn.addEventListener('click', (e) => { e.stopPropagation(); applyFree(); });
+  tools.appendChild(okBtn);
+  const resetBtn = d.createElement('button');
+  resetBtn.textContent = '解除';
+  resetBtn.title = 'フォント指定を取り消して元に戻す';
+  resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (state.designSel) commitDesignField(state.designSel, 'fontFamily', null, d);
+    closeColorPanel(d);
+  });
+  tools.appendChild(resetBtn);
+  pop.appendChild(tools);
+
+  ov.appendChild(pop);
+  pop.style.top = (parseFloat(bar.style.top || '0') + bar.offsetHeight + 6) + 'px';
+  positionDesignOverlay();
 }
 
 function selectDesignEl(el) {
