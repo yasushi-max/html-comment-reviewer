@@ -254,7 +254,9 @@
     <ol>
       <li><b>HTML資料を開く</b>：「📂 HTMLを開く」かドラッグ＆ドロップ</li>
       <li><b>コメント・修正を付ける</b>：直したい文字を選択 → 「💬 コメント」で指示を書くか、「✏️ 直接修正」で修正後の文言を自分で入力（Wordの変更履歴のように記録され、Claudeが反映時にそのまま置き換えます）。文書全体への指示は「＋ 全体コメント」</li>
-      <li><b>レイアウトを調整する</b>：「🎨 デザイン調整」を押してから、動かしたいブロックをクリック → そのままドラッグで移動、四隅のハンドルでサイズ変更、ツールバーの「A＋/A−」で文字サイズ。調整内容も指示として記録され、Claudeが反映時にレイアウトを壊さない自然な形で本実装します。もう一度ボタンを押すと通常モードに戻ります</li>
+      <li><b>デザインを調整する</b>：「🎨 デザイン調整」を押してから、ブロックをクリックで選択。ドラッグで移動、四隅のハンドルでサイズ変更ができ、ツールバーのタブで細かく調整できます
+        — <b>文字</b>（フォント・大きさ・太字・下線・行間・字間・揃え）／<b>色・枠</b>（文字色・背景・外枠・角丸・影。色はパレットやスポイト🎯で選択）／<b>配置</b>（並べ替え・複製・削除・余白）。
+        調整内容は指示として記録され、Claudeが反映時にレイアウトを壊さない自然な形で本実装します。もう一度ボタンを押すと通常モードに戻ります</li>
       <li><b>保存する</b>：「💾 コメント付きで保存」→ <b>「元の名前_コメント付き.html」</b>ができます（保存先を選ぶ画面が出た場合は選んだ場所に、出ない場合はダウンロードフォルダに入ります）</li>
       <li><b>Claudeに渡す</b>：そのファイルをClaude Codeのチャットにドラッグして、こう頼むだけ：</li>
     </ol>
@@ -298,16 +300,29 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
    - type "edit": quote が指す箇所の文言を replacement の文言にそのまま置き換える。
      勝手な言い換えや追加はしない。HTMLタグが絡む場合は、画面に表示される文言が
      replacement になるよう最小限のタグ調整のみ行う。
-   - type "design": レイアウト調整の指示。target（selector / tag / classes /
-     textHead / section）で対象要素を特定し、changes を反映する。
-     ・move.dx / dy: 右／下へ動かしたピクセル数（負は左／上）。これは画面上の
-       実測値なので、transformで座標を書き写すのではなく、その文書のスタイル
-       設計に合った自然な方法（マージン・flex/gridの配置・位置指定など）で
-       「その方向にそれだけ動いた見た目」を実現する。
-     ・size.widthPx / heightPx: 変更後の実測サイズ（origWidthPx / origHeightPx が
-       変更前）。割合に換算して % や fr 等、文書の既存の書き方に合わせてよい。
-     ・font.scale: 文字サイズの倍率（origPx は変更前の実測px）。対象要素内の
-       文字が倍率相当の大きさになるよう font-size 指定を調整する。
+   - type "design": デザイン・レイアウト調整の指示。target（selector / tag /
+     classes / textHead / section）で対象要素を特定し、changes の各項目を反映する。
+     px値は画面上の実測値なので「数値の書き写し」ではなく、その文書のスタイル
+     設計（変数・単位・配置方法）に合った自然なCSSで同じ見た目を実現すること。
+     ・move.dx/dy: 右／下へ動かしたpx（負は左／上）。マージンや配置の調整で実現
+     ・size.widthPx/heightPx: 変更後の実測サイズ（origWidthPx/origHeightPxが変更前。
+       比率に換算して % や fr 等で表現してよい）
+     ・font.scale: 文字サイズの倍率（origPx=変更前の実測px）
+     ・fontFamily.label/stack: フォント変更（明朝/ゴシック等。stackは参考。文書の
+       既存フォント指定の方式に合わせて反映）
+     ・fontWeight("bold") / fontStyle("italic") / textDecoration("underline"等) /
+       textAlign("left|center|right")
+     ・lineHeight.scale: 行間の倍率 ／ letterSpacing.em: 字間（em単位）
+     ・color.value / background.value: 文字色・背景色（hex）
+     ・border{width,color} / radius.px / shadow.level("soft|strong") /
+       opacity.value / padding.delta(内側余白の増減px)
+     ・removed:true → この要素を削除する ／ duplicate.count → 直後に複製をn個追加
+     ・reorder.shift → 兄弟要素の中で並び順をn個後ろへ（負は前へ）移動
+     適用の規則: (1) designコメントが複数ある場合は comments 配列の順に適用する
+     （特にreorderは先行エントリ適用後の並びを基準にした値）。
+     (2) duplicate の複製は、同じエントリの他の変更（色・フォント等）を反映した
+     状態のものを作る。(3) removed指定の要素も reorder の数では1つと数える
+     （削除は並べ替えの後に行う）。
      反映の結果ほかの要素と重なる・はみ出す場合は、周囲の余白等も含めて
      自然に調整してよい。
      注意: target の selector / textHead は表示時のDOMから採取した値のため、
@@ -409,14 +424,24 @@ const IFRAME_CSS = `
   html.cr-design-active body { cursor: crosshair; }
   .cr-design-banner {
     position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-    z-index: 2147483646; pointer-events: auto; cursor: pointer; user-select: none;
+    z-index: 2147483590; pointer-events: auto; cursor: pointer; user-select: none;
     background: #7e57c2; color: #fff; padding: 8px 18px; border-radius: 18px;
     font: 13px/1.5 -apple-system, "Hiragino Sans", sans-serif;
     box-shadow: 0 6px 24px rgba(0,0,0,0.3); white-space: nowrap;
   }
   .cr-design-banner:hover { background: #6a45b0; }
   .cr-design-banner::after { content: "🎨 デザイン調整モード中 — ブロックをクリックで選択（ここを押すと終了）"; }
+  .cr-design-banner.sampling { background: #00796b; }
+  .cr-design-banner.sampling::after { content: "🎯 色を拾いたい場所をクリックしてください（ここを押すと中止）"; }
   .cr-d-hover { outline: 2px dashed rgba(126, 87, 194, 0.65) !important; outline-offset: 1px; cursor: pointer; }
+  /* 削除プレビュー：通常時は非表示、デザイン調整モード中は半透明＋赤点線で表示（取り消せるように） */
+  [data-cr-removed] { display: none !important; }
+  html.cr-design-active [data-cr-removed] {
+    display: revert !important; opacity: 0.3 !important;
+    outline: 2px dashed rgba(198, 40, 40, 0.8) !important;
+  }
+  /* 複製プレビューの目印 */
+  .cr-clone { outline: 2px dashed rgba(67, 160, 71, 0.55); outline-offset: -2px; }
   .cr-design-overlay { position: absolute; z-index: 2147483600; pointer-events: none; }
   .cr-d-box {
     position: absolute; inset: 0; pointer-events: auto; cursor: move;
@@ -432,20 +457,56 @@ const IFRAME_CSS = `
   .cr-d-h.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
   .cr-d-h.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
   .cr-d-bar {
-    position: absolute; left: 50%; top: -46px; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 1px; pointer-events: auto;
-    background: #23272e; border-radius: 18px; padding: 4px 8px;
+    position: absolute; left: 50%; top: -92px; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 2px; pointer-events: auto;
+    background: #23272e; border-radius: 14px; padding: 6px 10px;
     box-shadow: 0 6px 24px rgba(0,0,0,0.35); white-space: nowrap;
   }
+  .cr-d-tabs, .cr-d-row { display: flex; align-items: center; gap: 1px; }
+  .cr-d-tabs { border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px; }
+  .cr-d-sp { flex: 1; min-width: 18px; }
+  .cr-d-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.22); margin: 0 5px; flex: none; }
   .cr-d-bar button {
     appearance: none; border: 0; background: none; color: #fff;
-    font-size: 12px; line-height: 1.4; padding: 4px 9px; border-radius: 10px; cursor: pointer;
+    font-size: 12px; line-height: 1.4; padding: 4px 8px; border-radius: 9px; cursor: pointer;
     font-family: -apple-system, "Hiragino Sans", sans-serif;
   }
   .cr-d-bar button:hover { background: #7e57c2; }
+  .cr-d-bar button.on { background: #7e57c2; font-weight: 700; }
   .cr-d-pct {
-    color: #cfd2d8; font-size: 11px; min-width: 40px; text-align: center;
-    font-family: -apple-system, sans-serif;
+    color: #cfd2d8; font-size: 11px; min-width: 36px; text-align: center;
+    font-family: -apple-system, "Hiragino Sans", sans-serif;
+  }
+  .cr-d-swbtn { display: inline-flex; align-items: center; gap: 5px; }
+  .cr-d-sw {
+    display: inline-block; width: 14px; height: 14px; border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.6); background: transparent;
+  }
+  .cr-d-sw.unset {
+    background: repeating-linear-gradient(45deg, #555 0 3px, #777 3px 6px);
+  }
+  .cr-d-pop {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    width: 248px; pointer-events: auto; background: #23272e; border-radius: 12px;
+    padding: 10px 12px; box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+    font-family: -apple-system, "Hiragino Sans", sans-serif;
+  }
+  .cr-d-pop-title { color: #fff; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .cr-d-pop-label { color: #aab0ba; font-size: 10.5px; margin: 7px 0 3px; }
+  .cr-d-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cr-d-cell {
+    width: 20px; height: 20px; border-radius: 5px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.35); padding: 0;
+  }
+  .cr-d-cell:hover { transform: scale(1.18); border-color: #fff; }
+  .cr-d-pop-tools { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .cr-d-pop-tools button {
+    appearance: none; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px;
+    background: none; color: #fff; font-size: 11.5px; padding: 4px 9px; cursor: pointer;
+  }
+  .cr-d-pop-tools button:hover { background: #7e57c2; }
+  .cr-d-pop-tools input[type="color"] {
+    width: 30px; height: 24px; border: 0; padding: 0; background: none; cursor: pointer;
   }
   .cr-d-flash { outline: 3px solid rgba(126, 87, 194, 0.85) !important; outline-offset: 2px; }
 `;
@@ -528,6 +589,35 @@ async function openFile(file) {
         if (c.changes.font && +c.changes.font.scale && +c.changes.font.scale !== 1) {
           ch.font = { scale: +c.changes.font.scale, origPx: +c.changes.font.origPx || 16 };
         }
+        // 拡張スタイル
+        const isHex = (v) => typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v);
+        if (c.changes.fontFamily && c.changes.fontFamily.stack) {
+          ch.fontFamily = { key: c.changes.fontFamily.key || '', label: c.changes.fontFamily.label || '', stack: String(c.changes.fontFamily.stack) };
+        }
+        if (c.changes.fontWeight) ch.fontWeight = String(c.changes.fontWeight);
+        if (c.changes.fontStyle) ch.fontStyle = String(c.changes.fontStyle);
+        if (c.changes.textDecoration) ch.textDecoration = String(c.changes.textDecoration);
+        if (['left', 'center', 'right'].includes(c.changes.textAlign)) ch.textAlign = c.changes.textAlign;
+        if (c.changes.lineHeight && +c.changes.lineHeight.scale && +c.changes.lineHeight.scale !== 1) {
+          ch.lineHeight = { scale: +c.changes.lineHeight.scale };
+        }
+        if (c.changes.letterSpacing && +c.changes.letterSpacing.em) {
+          ch.letterSpacing = { em: +c.changes.letterSpacing.em };
+        }
+        if (c.changes.color && isHex(c.changes.color.value)) ch.color = { value: c.changes.color.value };
+        if (c.changes.background && isHex(c.changes.background.value)) ch.background = { value: c.changes.background.value };
+        if (c.changes.border && +c.changes.border.width) {
+          ch.border = { width: +c.changes.border.width, color: isHex(c.changes.border.color) ? c.changes.border.color : '#e8702e' };
+        }
+        if (c.changes.radius && +c.changes.radius.px) ch.radius = { px: +c.changes.radius.px };
+        if (c.changes.shadow && ['soft', 'strong'].includes(c.changes.shadow.level)) ch.shadow = { level: c.changes.shadow.level };
+        if (c.changes.opacity && +c.changes.opacity.value && +c.changes.opacity.value !== 1) {
+          ch.opacity = { value: +c.changes.opacity.value };
+        }
+        if (c.changes.padding && +c.changes.padding.delta) ch.padding = { delta: Math.round(+c.changes.padding.delta) };
+        if (c.changes.removed) ch.removed = true;
+        if (c.changes.duplicate && +c.changes.duplicate.count > 0) ch.duplicate = { count: Math.round(+c.changes.duplicate.count) };
+        if (c.changes.reorder && +c.changes.reorder.shift) ch.reorder = { shift: Math.round(+c.changes.reorder.shift) };
         state.comments.push({
           id: 'c' + (state.nextId++),
           type: 'design',
@@ -606,6 +696,8 @@ function renderDoc() {
     state.designSel = null;
     state.drag = null;
     state.pickAtDown = null;
+    state.sampling = null;
+    docColorCache = null; // 資料の抽出色をリセット
     $('designBtn').classList.remove('mode-on');
     $('designBtn').textContent = '🎨 デザイン調整';
     frame.removeAttribute('sandbox');
@@ -662,6 +754,12 @@ function setupIframe() {
   d.addEventListener('mousemove', onDesignMouseMove, true);
   d.addEventListener('mouseup', onDesignMouseUp, true);
   d.addEventListener('click', onDesignClick, true);
+  d.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.sampling) {
+      cancelSampling(d);
+      toast('色の採取を中止しました');
+    }
+  });
   iwin().addEventListener('scroll', positionDesignOverlay, true);
   iwin().addEventListener('resize', positionDesignOverlay);
 
@@ -703,6 +801,8 @@ function setupIframe() {
         }
         if (!c.origFontPx) c.origFontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
         applyDesignEntry(c, el, d);
+        // 並べ替えはapplyDesignEntryでは扱わない（繰り返し呼ばれるため）。読込時に一度だけ適用
+        if (c.changes.reorder && c.changes.reorder.shift) applyReorder(el, c.changes.reorder.shift);
         c.anchored = true;
       } else {
         c.anchored = false;
@@ -729,7 +829,7 @@ function currentSelectionRange() {
   // （文書本来のテキストではないため、コメントや再修正は元の文言側に付けてもらう）
   const ca = r.commonAncestorContainer;
   const el = ca.nodeType === 1 ? ca : ca.parentElement;
-  if (el && el.closest && el.closest('.cr-ins, .cr-float, .cr-design-overlay')) return null;
+  if (el && el.closest && el.closest('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone')) return null;
   return r;
 }
 
@@ -807,7 +907,7 @@ function computeAnchorFromRange(range, d) {
     const textOfRange = (r) => {
       const frag = r.cloneContents();
       if (frag.querySelectorAll) {
-        frag.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, script, style').forEach((el) => el.remove());
+        frag.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, script, style').forEach((el) => el.remove());
       }
       return frag.textContent || '';
     };
@@ -832,6 +932,7 @@ function findSection(range, d) {
   // 直前の見出し（h1〜h6）を探す。セクション内にいる場合は同じセクション内の見出しに限る
   let best = null;
   for (const h of d.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+    if (h.closest('.cr-clone')) continue; // 複製プレビューの見出しは数えない
     if (sec && !sec.contains(h)) continue;
     const pos = h.compareDocumentPosition(el);
     if (pos & Node.DOCUMENT_POSITION_FOLLOWING) best = h;
@@ -839,7 +940,7 @@ function findSection(range, d) {
   if (best) return normText(best.textContent).slice(0, 60);
   // 見出しがなければ何番目のセクション（スライド）かと冒頭テキストを記録
   if (sec) {
-    const all = [...d.querySelectorAll(sec.tagName.toLowerCase())];
+    const all = [...d.querySelectorAll(sec.tagName.toLowerCase())].filter((s) => !s.closest('.cr-clone'));
     const i = all.indexOf(sec);
     const head = normText(sec.textContent).slice(0, 25);
     if (i >= 0) return `${i + 1}番目のセクション${head ? `（${head}…）` : ''}`;
@@ -854,8 +955,8 @@ function buildTextIndex(d) {
   const walker = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
       const p = n.parentElement;
-      // .cr-ins（直接修正の新文言）やツールのUI要素は文書本来のテキストではないので除外する
-      if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay')) return NodeFilter.FILTER_REJECT;
+      // .cr-ins（直接修正の新文言）やツールのUI要素・複製プレビューは文書本来のテキストではないので除外する
+      if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone')) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
@@ -934,13 +1035,13 @@ function wrapRange(range, cid, d) {
   if (ca.nodeType === 3) {
     // 単一テキストノードの場合も除外規則（.cr-ins等）を適用する
     const p = ca.parentElement;
-    nodes = (p && p.closest('script, style, .cr-float, .cr-ins')) ? [] : [ca];
+    nodes = (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone')) ? [] : [ca];
   } else {
     const walker = d.createTreeWalker(ca, NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
         if (!range.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
         const p = n.parentElement;
-        if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay')) return NodeFilter.FILTER_REJECT;
+        if (p && p.closest('script, style, .cr-float, .cr-ins, .cr-design-overlay, .cr-clone')) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
     });
@@ -1038,6 +1139,7 @@ function designPickBlock(t, d) {
   let cur = t && t.nodeType === 1 ? t : (t ? t.parentElement : null);
   while (cur && cur !== d.body && cur !== d.documentElement) {
     if (cur.closest('.cr-design-overlay, .cr-float, .cr-design-banner')) return null;
+    if (cur.closest('.cr-clone')) { toast('複製のプレビューは直接操作できません（元のブロックを操作してください）'); return null; }
     const disp = getComputedStyle(cur).display;
     const isToolInline = cur.matches('mark.cr-mark, sup.cr-badge, ins.cr-ins');
     if (!isToolInline && disp !== 'inline' && disp !== 'contents') return cur;
@@ -1057,7 +1159,9 @@ function designCssPath(el, d) {
     if (cls.length) part += '.' + cls.map((c) => CSS.escape(c)).join('.');
     const parent = cur.parentElement;
     if (parent) {
-      const same = [...parent.children].filter((ch) => ch.tagName === cur.tagName);
+      // クローン等のツール挿入要素は数えない（元ソースと一致する番号を保つ）
+      const same = [...parent.children].filter((ch) =>
+        ch.tagName === cur.tagName && !ch.classList.contains('cr-clone') && !/cr-design/.test(ch.className || ''));
       if (same.length > 1) part += `:nth-of-type(${same.indexOf(cur) + 1})`;
     }
     parts.unshift(part);
@@ -1070,7 +1174,7 @@ function designCssPath(el, d) {
 function designTextHead(el) {
   const tmp = el.cloneNode(true);
   if (tmp.querySelectorAll) {
-    tmp.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, sup.cr-badge, script, style').forEach((x) => x.remove());
+    tmp.querySelectorAll('.cr-ins, .cr-float, .cr-design-overlay, .cr-clone, sup.cr-badge, script, style').forEach((x) => x.remove());
   }
   return normText(tmp.textContent).slice(0, 40);
 }
@@ -1089,7 +1193,7 @@ function describeDesignTarget(el, d) {
 function findDesignTarget(t, d) {
   if (t.selector) {
     try {
-      const els = d.querySelectorAll(t.selector);
+      const els = [...d.querySelectorAll(t.selector)].filter((el) => !el.closest('.cr-clone'));
       if (els.length === 1) return els[0];
       if (els.length > 1) {
         if (t.textHead) {
@@ -1103,7 +1207,7 @@ function findDesignTarget(t, d) {
     const sel = t.tag || '*';
     try {
       for (const el of d.body.querySelectorAll(sel)) {
-        if (el.closest('.cr-design-overlay')) continue;
+        if (el.closest('.cr-design-overlay, .cr-clone')) continue;
         if (designTextHead(el).startsWith(t.textHead.slice(0, 20))) return el;
       }
     } catch (e) { /* noop */ }
@@ -1138,72 +1242,239 @@ function designEntryFor(el, d) {
   return c;
 }
 
-// 文字サイズ倍率の適用。cqw等の明示サイズを持つ子要素にも効くように
-// 子孫それぞれの実測サイズ×倍率をインラインで設定する（倍率1で原状復帰）
-function applyFontScale(el, scale, d) {
-  const targets = [el, ...el.querySelectorAll('*')].filter((t) => {
-    if (t.closest('.cr-design-overlay, .cr-design-banner')) return false;
-    // mark/ins等のツール挿入要素は自前のfont-sizeを持たない＝親から継承するので
-    // 個別設定しない（後から挿入された場合の二重スケール防止）
+// サブツリー適用の対象（ツールUI・他エントリの配下・複製プレビューは除外）
+function subtreeTargets(el) {
+  return [el, ...el.querySelectorAll('*')].filter((t) => {
+    if (t.closest('.cr-design-overlay, .cr-design-banner, .cr-clone')) return false;
+    // mark/ins等のツール挿入要素は親から継承するので個別設定しない（二重適用防止）
     if (t !== el && t.matches('sup.cr-badge, .cr-float, mark.cr-mark, ins.cr-ins')) return false;
     // 別のdesignエントリの対象（とその配下）には触れない（入れ子時の衝突防止）
     const owner = t === el ? el : t.closest('[data-cr-design]');
     return owner === el || owner === null;
   });
-  for (const t of targets) {
-    if (scale === 1 && t.dataset.crOfs === undefined) continue;
-    if (t.dataset.crOfs === undefined) {
-      t.dataset.crOfs = String(parseFloat(getComputedStyle(t).fontSize) || 16);
-      t.dataset.crOfsInline = t.style.fontSize || '';
+}
+
+// 「実測値×倍率」型のサブツリー適用（font-size・line-height用）。
+// 資料側がcqw等で明示指定していても効くように、子孫ごとに実測値を基準にする。
+// 倍率1（または null）で原状復帰。
+function applySubtreeScale(el, prop, datasetKey, scale, measureFn) {
+  for (const t of subtreeTargets(el)) {
+    const kOrig = datasetKey;            // 例: crOfs（実測px）
+    const kInline = datasetKey + 'In';   // 元のインライン値
+    const neutral = !scale || scale === 1;
+    if (neutral && t.dataset[kOrig] === undefined) continue;
+    if (t.dataset[kOrig] === undefined) {
+      t.dataset[kOrig] = String(measureFn(t));
+      t.dataset[kInline] = t.style.getPropertyValue(prop) || '';
     }
-    if (scale === 1) {
-      t.style.fontSize = t.dataset.crOfsInline;
-      delete t.dataset.crOfs;
-      delete t.dataset.crOfsInline;
+    if (neutral) {
+      if (t.dataset[kInline]) t.style.setProperty(prop, t.dataset[kInline]);
+      else t.style.removeProperty(prop);
+      delete t.dataset[kOrig];
+      delete t.dataset[kInline];
     } else {
-      t.style.fontSize = (parseFloat(t.dataset.crOfs) * scale).toFixed(2) + 'px';
+      t.style.setProperty(prop, (parseFloat(t.dataset[kOrig]) * scale).toFixed(2) + 'px');
     }
   }
 }
 
-// エントリの内容を要素のスタイルに反映（何度呼んでも同じ結果になる）
+// 「固定値」型のサブツリー適用（font-family・font-weight・color・letter-spacing用）。
+// 資料側がクラスで明示指定している子孫にも効くようにインラインで上書きする。
+// value が null で原状復帰。
+function applySubtreeConst(el, prop, datasetKey, value) {
+  for (const t of subtreeTargets(el)) {
+    const kInline = datasetKey + 'In';
+    if (value == null && t.dataset[kInline] === undefined) continue;
+    if (t.dataset[kInline] === undefined) {
+      t.dataset[kInline] = t.style.getPropertyValue(prop) || '';
+    }
+    if (value == null) {
+      if (t.dataset[kInline]) t.style.setProperty(prop, t.dataset[kInline]);
+      else t.style.removeProperty(prop);
+      delete t.dataset[kInline];
+    } else {
+      t.style.setProperty(prop, value);
+    }
+  }
+}
+
+function applyFontScale(el, scale, d) {
+  applySubtreeScale(el, 'font-size', 'crOfs', scale,
+    (t) => parseFloat(getComputedStyle(t).fontSize) || 16);
+}
+
+function applyLineHeightScale(el, scale, fontScale) {
+  // 文字サイズ変更後に基準を初測定する場合に備え、フォント倍率で割り戻して
+  // 「元のフォントサイズ時の行間」を基準として記録する（保存往復でのズレ防止）
+  const fs = fontScale || 1;
+  applySubtreeScale(el, 'line-height', 'crOlh', scale, (t) => {
+    const cs = getComputedStyle(t);
+    const lh = parseFloat(cs.lineHeight);
+    // line-height:normal は数値にならないため、フォントサイズ×1.4を基準にする
+    return (Number.isFinite(lh) ? lh : (parseFloat(cs.fontSize) || 16) * 1.4) / fs;
+  });
+}
+
+// 内側余白（padding）の増減。実測の4辺それぞれに delta px を足す
+function applyPaddingDelta(el, delta) {
+  if (!delta) {
+    // 復元はapplyDesignEntryのstyle再構築が担うため、控えの削除のみ
+    delete el.dataset.crOpad;
+    return;
+  }
+  if (el.dataset.crOpad === undefined) {
+    const cs = getComputedStyle(el);
+    el.dataset.crOpad = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft]
+      .map((v) => parseFloat(v) || 0).join(' ');
+  }
+  const base = el.dataset.crOpad.split(' ').map(Number);
+  const sides = ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'];
+  sides.forEach((p, i) => el.style.setProperty(p, Math.max(0, base[i] + delta) + 'px'));
+}
+
+// 影・フォントのプリセット定義
+const SHADOW_PRESETS = {
+  none: '',
+  soft: '0 4px 14px rgba(0,0,0,0.18)',
+  strong: '0 10px 30px rgba(0,0,0,0.35)',
+};
+const FONT_PRESETS = [
+  { key: 'mincho', label: '明朝', stack: '"Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif' },
+  { key: 'gothic', label: 'ゴシック', stack: '"Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", Meiryo, sans-serif' },
+  { key: 'maru', label: '丸ゴシック', stack: '"Hiragino Maru Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif' },
+  { key: 'mono', label: '等幅', stack: '"SF Mono", Menlo, Consolas, "MS Gothic", monospace' },
+];
+
+// エントリの内容を要素のスタイルに反映。
+// インラインstyleは毎回「変更前の状態」から再構築する（shorthand/longhandの
+// 復元漏れを防ぎ、何度呼んでも同じ結果になる）
 function applyDesignEntry(c, el, d) {
   if (el.dataset.crOrigStyle === undefined) el.dataset.crOrigStyle = el.getAttribute('style') || '';
   el.dataset.crDesign = c.id;
   const ch = c.changes || {};
+
+  // --- ルートのインラインstyleを原状から再構築 ---
+  if (el.dataset.crOrigStyle) el.setAttribute('style', el.dataset.crOrigStyle);
+  else el.removeAttribute('style');
+
+  // --- 位置・サイズ ---
   if (ch.move && (ch.move.dx || ch.move.dy)) setTranslate(el, ch.move.dx, ch.move.dy);
-  else clearTranslate(el);
   if (ch.size) {
     // 実測(border-box)サイズをそのまま指定できるよう box-sizing も揃える
     el.style.boxSizing = 'border-box';
     el.style.width = ch.size.widthPx + 'px';
     el.style.height = ch.size.heightPx + 'px';
-  } else {
-    // サイズ変更なし：元のインライン値（あれば）に戻す
-    restoreInlineProp(el, 'box-sizing');
-    restoreInlineProp(el, 'width');
-    restoreInlineProp(el, 'height');
   }
+
+  // --- 文字（サブツリー適用系） ---
   applyFontScale(el, ch.font ? ch.font.scale : 1, d);
+  applyLineHeightScale(el, ch.lineHeight ? ch.lineHeight.scale : 1, ch.font ? ch.font.scale : 1);
+  applySubtreeConst(el, 'font-family', 'crOff', ch.fontFamily ? ch.fontFamily.stack : null);
+  applySubtreeConst(el, 'font-weight', 'crOfw', ch.fontWeight || null);
+  applySubtreeConst(el, 'color', 'crOco', ch.color ? ch.color.value : null);
+  applySubtreeConst(el, 'letter-spacing', 'crOls',
+    ch.letterSpacing && ch.letterSpacing.em ? ch.letterSpacing.em + 'em' : null);
+
+  // --- 文字（ルートのみで効くもの）と色・枠 ---
+  const setIf = (prop, val) => { if (val != null) el.style.setProperty(prop, val); };
+  setIf('font-style', ch.fontStyle || null);
+  setIf('text-decoration', ch.textDecoration || null);
+  setIf('text-align', ch.textAlign || null);
+  setIf('background-color', ch.background ? ch.background.value : null);
+  if (ch.border && ch.border.width) {
+    el.style.setProperty('border', `${ch.border.width}px solid ${ch.border.color || '#e8702e'}`);
+  }
+  setIf('border-radius', ch.radius && ch.radius.px ? ch.radius.px + 'px' : null);
+  setIf('box-shadow', ch.shadow && ch.shadow.level && ch.shadow.level !== 'none' ? SHADOW_PRESETS[ch.shadow.level] : null);
+  setIf('opacity', ch.opacity && ch.opacity.value !== 1 ? String(ch.opacity.value) : null);
+
+  // --- 余白 ---
+  applyPaddingDelta(el, ch.padding ? ch.padding.delta : 0);
+
+  // --- 削除（プレビュー：モード中は半透明、通常時は非表示。CSSが切替） ---
+  if (ch.removed) el.dataset.crRemoved = '1';
+  else delete el.dataset.crRemoved;
+
+  // --- 複製（プレビュー：スタイル適用後の姿で毎回作り直す） ---
+  syncDesignClones(c, el, d);
+}
+
+// 複製プレビュー：スタイル適用後の現在の姿で、毎回作り直す
+// （複製後のスタイル変更や並べ替えにも追従させるため）
+function syncDesignClones(c, el, d) {
+  d.querySelectorAll(`.cr-clone[data-cr-clone-of="${c.id}"]`).forEach((x) => x.remove());
+  const want = c.changes.duplicate ? Math.max(1, c.changes.duplicate.count) : 0;
+  let after = el;
+  for (let i = 0; i < want; i++) {
+    const clone = el.cloneNode(true);
+    // クローン側からツールの痕跡（マーク・バッジ・ins・data属性）を除去する
+    clone.querySelectorAll('sup.cr-badge, ins.cr-ins').forEach((x) => x.remove());
+    clone.querySelectorAll('mark.cr-mark').forEach((m) => {
+      const p = m.parentNode;
+      while (m.firstChild) p.insertBefore(m.firstChild, m);
+      m.remove();
+    });
+    [clone, ...clone.querySelectorAll('*')].forEach((t) => {
+      for (const k of Object.keys(t.dataset)) { if (k.startsWith('cr')) delete t.dataset[k]; }
+    });
+    clone.classList.add('cr-clone');
+    clone.setAttribute('data-cr-clone-of', c.id);
+    after.insertAdjacentElement('afterend', clone);
+    after = clone;
+  }
+}
+
+// 並べ替えプレビュー：兄弟要素の中で shift ぶん前後に移動する
+function applyReorder(el, shift) {
+  // クローンは「実在の兄弟」として数えない（保存される移動量を汚さないため）
+  let n = shift;
+  while (n < 0) {
+    let prev = el.previousElementSibling;
+    while (prev && prev.matches('.cr-clone')) prev = prev.previousElementSibling;
+    if (!prev || prev.matches('.cr-design-overlay, .cr-design-banner')) break;
+    el.parentElement.insertBefore(el, prev);
+    n++;
+  }
+  while (n > 0) {
+    let next = el.nextElementSibling;
+    while (next && next.matches('.cr-clone')) next = next.nextElementSibling;
+    if (!next || next.matches('.cr-design-overlay, .cr-design-banner')) break;
+    el.parentElement.insertBefore(next, el);
+    n--;
+  }
+  return shift - n; // 実際に動けた量
 }
 
 // エントリの取り消し：要素を変更前の状態に戻す
 function revertDesignEntry(c, d) {
   const el = d.querySelector(`[data-cr-design="${c.id}"]`);
   if (!el) return;
+  // 並べ替えを元に戻す
+  if (c.changes.reorder && c.changes.reorder.shift) applyReorder(el, -c.changes.reorder.shift);
+  // クローンを撤去
+  d.querySelectorAll(`.cr-clone[data-cr-clone-of="${c.id}"]`).forEach((x) => x.remove());
+  // サブツリー適用系を原状復帰
   applyFontScale(el, 1, d);
+  applyLineHeightScale(el, 1);
+  applySubtreeConst(el, 'font-family', 'crOff', null);
+  applySubtreeConst(el, 'font-weight', 'crOfw', null);
+  applySubtreeConst(el, 'color', 'crOco', null);
+  applySubtreeConst(el, 'letter-spacing', 'crOls', null);
+  // ルートのstyle属性を変更前の状態に戻す
   const orig = el.dataset.crOrigStyle || '';
   if (orig) el.setAttribute('style', orig);
   else el.removeAttribute('style');
   delete el.dataset.crDesign;
   delete el.dataset.crOrigStyle;
+  delete el.dataset.crRemoved;
+  delete el.dataset.crOpad;
 }
 
 function finishDesignCommit(c, el, d, before) {
   applyDesignEntry(c, el, d);
   const after = JSON.stringify(c.changes);
   const changed = before !== after;
-  if (!c.changes.move && !c.changes.size && !c.changes.font) {
+  if (Object.keys(c.changes).length === 0) {
     // 実質変更なしになったらエントリごと取り消す
     revertDesignEntry(c, d);
     state.comments = state.comments.filter((x) => x.id !== c.id);
@@ -1215,6 +1486,58 @@ function finishDesignCommit(c, el, d, before) {
   }
   positionDesignOverlay();
   updateDesignBar();
+}
+
+// 汎用：エントリの changes の1フィールドを設定/削除して確定する
+function commitDesignField(el, field, value, d) {
+  const c = designEntryFor(el, d);
+  const before = JSON.stringify(c.changes);
+  if (value === null || value === undefined) delete c.changes[field];
+  else c.changes[field] = value;
+  finishDesignCommit(c, el, d, before);
+}
+
+// 現在のエントリ（なければnull）— ツールバーの状態表示用
+function designEntryOf(el) {
+  if (!el || el.dataset.crDesign === undefined) return null;
+  return state.comments.find((x) => x.id === el.dataset.crDesign) || null;
+}
+
+// ステッパー系（行間・字間・角丸・透明度・余白）の共通処理
+function commitDesignStep(el, field, step, conf, d) {
+  const c = designEntryFor(el, d);
+  const cur = c.changes[field] ? c.changes[field][conf.key] : conf.neutral;
+  let next = Math.round((cur + step) / conf.step) * conf.step;
+  next = Math.min(conf.max, Math.max(conf.min, next));
+  next = Math.round(next * 1000) / 1000;
+  const before = JSON.stringify(c.changes);
+  if (next === conf.neutral) delete c.changes[field];
+  else c.changes[field] = { [conf.key]: next };
+  finishDesignCommit(c, el, d, before);
+}
+const STEP_CONF = {
+  lineHeight: { key: 'scale', neutral: 1, step: 0.1, min: 0.6, max: 3 },
+  letterSpacing: { key: 'em', neutral: 0, step: 0.02, min: -0.1, max: 0.5 },
+  radius: { key: 'px', neutral: 0, step: 4, min: 0, max: 48 },
+  opacity: { key: 'value', neutral: 1, step: 0.1, min: 0.2, max: 1 },
+  padding: { key: 'delta', neutral: 0, step: 6, min: -48, max: 96 },
+};
+
+// 並べ替え（兄弟の中で前後に動かす）
+function commitDesignReorder(el, dir, d) {
+  const c = designEntryFor(el, d);
+  const before = JSON.stringify(c.changes);
+  const moved = applyReorder(el, dir);
+  if (!moved) {
+    toast(dir < 0 ? 'これ以上前へ動かせません' : 'これ以上後ろへ動かせません');
+    finishDesignCommit(c, el, d, before); // 新規の空エントリならここで掃除される
+    return;
+  }
+  const cur = c.changes.reorder ? c.changes.reorder.shift : 0;
+  const next = cur + moved;
+  if (next === 0) delete c.changes.reorder;
+  else c.changes.reorder = { shift: next };
+  finishDesignCommit(c, el, d, before);
 }
 
 function commitDesignMove(el, dx, dy, d) {
@@ -1249,18 +1572,38 @@ function commitFontStep(el, step, d) {
 }
 
 function designSummary(c) {
+  const ch = c.changes;
   const parts = [];
-  const m = c.changes.move;
+  if (ch.removed) parts.push('🗑 このブロックを削除');
+  if (ch.duplicate) parts.push(`⧉ 複製×${ch.duplicate.count}`);
+  if (ch.reorder) parts.push(`並び順 ${ch.reorder.shift > 0 ? `${ch.reorder.shift}つ後ろへ` : `${-ch.reorder.shift}つ前へ`}`);
+  const m = ch.move;
   if (m && (m.dx || m.dy)) {
     parts.push('移動 ' + [
       m.dx ? (m.dx > 0 ? `右${m.dx}px` : `左${-m.dx}px`) : null,
       m.dy ? (m.dy > 0 ? `下${m.dy}px` : `上${-m.dy}px`) : null,
     ].filter(Boolean).join('・'));
   }
-  const s = c.changes.size;
+  const s = ch.size;
   if (s) parts.push(`サイズ ${s.widthPx}×${s.heightPx}px（元 ${s.origWidthPx}×${s.origHeightPx}）`);
-  const f = c.changes.font;
-  if (f) parts.push(`文字 ${Math.round(f.scale * 100)}%`);
+  if (ch.font) parts.push(`文字 ${Math.round(ch.font.scale * 100)}%`);
+  if (ch.fontFamily) parts.push(`フォント ${ch.fontFamily.label}`);
+  if (ch.fontWeight) parts.push('太字');
+  if (ch.fontStyle) parts.push('斜体');
+  if (ch.textDecoration) {
+    if (ch.textDecoration.includes('underline')) parts.push('下線');
+    if (ch.textDecoration.includes('line-through')) parts.push('取り消し線');
+  }
+  if (ch.textAlign) parts.push({ left: '左揃え', center: '中央揃え', right: '右揃え' }[ch.textAlign]);
+  if (ch.lineHeight) parts.push(`行間 ${Math.round(ch.lineHeight.scale * 100)}%`);
+  if (ch.letterSpacing) parts.push(`字間 ${ch.letterSpacing.em > 0 ? '+' : ''}${ch.letterSpacing.em}em`);
+  if (ch.color) parts.push(`文字色 ${ch.color.value}`);
+  if (ch.background) parts.push(`背景 ${ch.background.value}`);
+  if (ch.border) parts.push(`枠線 ${ch.border.width}px ${ch.border.color}`);
+  if (ch.radius) parts.push(`角丸 ${ch.radius.px}px`);
+  if (ch.shadow) parts.push(`影（${ch.shadow.level === 'soft' ? '弱' : '強'}）`);
+  if (ch.opacity) parts.push(`不透明度 ${Math.round(ch.opacity.value * 100)}%`);
+  if (ch.padding) parts.push(`余白 ${ch.padding.delta > 0 ? '+' : ''}${ch.padding.delta}px`);
   return parts.join(' ／ ') || '（変更なし）';
 }
 
@@ -1280,30 +1623,51 @@ function ensureDesignOverlay(d) {
     h.dataset.corner = k;
     ov.appendChild(h);
   }
+  ov.appendChild(buildDesignPanel(d));
+  d.body.appendChild(ov);
+  return ov;
+}
+
+/* ---------- タブ式ツールバー ---------- */
+
+function buildDesignPanel(d) {
   const bar = d.createElement('div');
   bar.className = 'cr-d-bar';
-  const mkBtn = (label, title, fn) => {
+  const elNow = () => state.designSel;
+  const mk = (label, title, fn, role) => {
     const b = d.createElement('button');
     b.textContent = label;
-    b.title = title;
-    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
-    bar.appendChild(b);
+    if (title) b.title = title;
+    if (role) b.dataset.role = role;
+    b.addEventListener('click', (e) => { e.stopPropagation(); fn && fn(); updateDesignBar(); });
+    return b;
   };
-  mkBtn('A−', '文字を小さく', () => { if (state.designSel) commitFontStep(state.designSel, -0.1, d); });
-  const pct = d.createElement('span');
-  pct.className = 'cr-d-pct';
-  pct.textContent = '100%';
-  bar.appendChild(pct);
-  mkBtn('A＋', '文字を大きく', () => { if (state.designSel) commitFontStep(state.designSel, +0.1, d); });
-  mkBtn('⬆ 親', 'ひとまわり外側のブロックを選択', () => {
-    if (!state.designSel) return;
-    const p = designPickBlock(state.designSel.parentElement, d);
+  const sep = () => { const s = d.createElement('span'); s.className = 'cr-d-sep'; return s; };
+  const val = (role, text) => { const s = d.createElement('span'); s.className = 'cr-d-pct'; s.dataset.role = role; s.textContent = text; return s; };
+  const stepper = (row, labelMinus, labelPlus, field, fmtRole, title) => {
+    row.appendChild(mk(labelMinus, title + 'を小さく', () => elNow() && commitDesignStep(elNow(), field, -STEP_CONF[field].step, STEP_CONF[field], d)));
+    row.appendChild(val(fmtRole, '—'));
+    row.appendChild(mk(labelPlus, title + 'を大きく', () => elNow() && commitDesignStep(elNow(), field, +STEP_CONF[field].step, STEP_CONF[field], d)));
+  };
+
+  // ===== タブ行（右端に共通操作） =====
+  const tabs = d.createElement('div');
+  tabs.className = 'cr-d-tabs';
+  for (const [key, label] of [['text', '文字'], ['color', '色・枠'], ['layout', '配置']]) {
+    const b = mk(label, '', () => { state.designTab = key; updateDesignTab(d); });
+    b.dataset.tabkey = key;
+    tabs.appendChild(b);
+  }
+  const sp = d.createElement('span');
+  sp.className = 'cr-d-sp';
+  tabs.appendChild(sp);
+  tabs.appendChild(mk('⬆ 親', 'ひとまわり外側のブロックを選択', () => {
+    const p = elNow() && designPickBlock(elNow().parentElement, d);
     if (p) selectDesignEl(p);
-  });
-  mkBtn('↺ 戻す', 'この要素の調整をすべて取り消す', () => {
-    const el = state.designSel;
-    if (!el) return;
-    const c = el.dataset.crDesign ? state.comments.find((x) => x.id === el.dataset.crDesign) : null;
+  }));
+  tabs.appendChild(mk('↺ 戻す', 'この要素の調整をすべて取り消す', () => {
+    const el = elNow();
+    const c = designEntryOf(el);
     if (c) {
       revertDesignEntry(c, d);
       state.comments = state.comments.filter((x) => x.id !== c.id);
@@ -1311,12 +1675,143 @@ function ensureDesignOverlay(d) {
       refresh();
     }
     positionDesignOverlay();
-    updateDesignBar();
-  });
-  mkBtn('✕', '選択解除', () => selectDesignEl(null));
-  ov.appendChild(bar);
-  d.body.appendChild(ov);
-  return ov;
+  }));
+  tabs.appendChild(mk('✕', '選択解除', () => selectDesignEl(null)));
+  bar.appendChild(tabs);
+
+  // ===== 文字タブ =====
+  const rowT = d.createElement('div');
+  rowT.className = 'cr-d-row';
+  rowT.dataset.tab = 'text';
+  for (const f of FONT_PRESETS) {
+    rowT.appendChild(mk(f.label, `フォントを${f.label}に（もう一度押すと元に戻す）`, () => {
+      const el = elNow(); if (!el) return;
+      const c = designEntryOf(el);
+      const cur = c && c.changes.fontFamily ? c.changes.fontFamily.key : null;
+      commitDesignField(el, 'fontFamily', cur === f.key ? null : { key: f.key, label: f.label, stack: f.stack }, d);
+    }, 'font-' + f.key));
+  }
+  rowT.appendChild(sep());
+  rowT.appendChild(mk('A−', '文字を小さく', () => elNow() && commitFontStep(elNow(), -0.1, d)));
+  rowT.appendChild(val('pct', '100%'));
+  rowT.appendChild(mk('A＋', '文字を大きく', () => elNow() && commitFontStep(elNow(), +0.1, d)));
+  rowT.appendChild(sep());
+  rowT.appendChild(mk('B', '太字', () => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    commitDesignField(el, 'fontWeight', c && c.changes.fontWeight ? null : 'bold', d);
+  }, 'bold'));
+  rowT.appendChild(mk('I', '斜体', () => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    commitDesignField(el, 'fontStyle', c && c.changes.fontStyle ? null : 'italic', d);
+  }, 'italic'));
+  const decoToggle = (kind) => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    const parts = new Set(((c && c.changes.textDecoration) || '').split(' ').filter(Boolean));
+    if (parts.has(kind)) parts.delete(kind); else parts.add(kind);
+    commitDesignField(el, 'textDecoration', [...parts].join(' ') || null, d);
+  };
+  rowT.appendChild(mk('U', '下線', () => decoToggle('underline'), 'underline'));
+  rowT.appendChild(mk('S', '取り消し線', () => decoToggle('line-through'), 'line-through'));
+  rowT.appendChild(sep());
+  stepper(rowT, '行間−', '行間＋', 'lineHeight', 'lh', '行間');
+  stepper(rowT, '字間−', '字間＋', 'letterSpacing', 'ls', '字間');
+  rowT.appendChild(sep());
+  for (const [a, label] of [['left', '⯇左'], ['center', '中央'], ['right', '右⯈']]) {
+    rowT.appendChild(mk(label, `テキストを${label.replace(/[⯇⯈]/g, '')}揃えに`, () => {
+      const el = elNow(); if (!el) return;
+      const c = designEntryOf(el);
+      const cur = c && c.changes.textAlign;
+      commitDesignField(el, 'textAlign', cur === a ? null : a, d);
+    }, 'align-' + a));
+  }
+  bar.appendChild(rowT);
+
+  // ===== 色・枠タブ =====
+  const rowC = d.createElement('div');
+  rowC.className = 'cr-d-row';
+  rowC.dataset.tab = 'color';
+  const swatchBtn = (label, field, title) => {
+    const b = d.createElement('button');
+    b.className = 'cr-d-swbtn';
+    b.title = title;
+    b.dataset.role = 'sw-' + field;
+    const chip = d.createElement('span');
+    chip.className = 'cr-d-sw';
+    chip.dataset.role = 'swchip-' + field;
+    b.appendChild(chip);
+    b.appendChild(d.createTextNode(label));
+    b.addEventListener('click', (e) => { e.stopPropagation(); openColorPanel(d, field); });
+    return b;
+  };
+  rowC.appendChild(swatchBtn('文字色', 'color', '文字の色を選ぶ'));
+  rowC.appendChild(swatchBtn('背景', 'background', '背景の色を選ぶ'));
+  rowC.appendChild(sep());
+  for (const [w, label] of [[0, '枠なし'], [2, '枠：細'], [4, '枠：太']]) {
+    rowC.appendChild(mk(label, '外枠を付ける/外す', () => {
+      const el = elNow(); if (!el) return;
+      const c = designEntryOf(el);
+      const cur = c && c.changes.border ? c.changes.border : null;
+      if (w === 0) commitDesignField(el, 'border', null, d);
+      else commitDesignField(el, 'border', { width: w, color: (cur && cur.color) || '#e8702e' }, d);
+    }, 'border-' + w));
+  }
+  rowC.appendChild(swatchBtn('枠色', 'borderColor', '外枠の色を選ぶ'));
+  rowC.appendChild(sep());
+  stepper(rowC, '角丸−', '角丸＋', 'radius', 'rad', '角の丸み');
+  rowC.appendChild(sep());
+  rowC.appendChild(mk('影', '影：なし→弱→強の順に切替', () => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    const cur = (c && c.changes.shadow && c.changes.shadow.level) || 'none';
+    const next = cur === 'none' ? 'soft' : (cur === 'soft' ? 'strong' : 'none');
+    commitDesignField(el, 'shadow', next === 'none' ? null : { level: next }, d);
+  }, 'shadow'));
+  stepper(rowC, '不透明−', '不透明＋', 'opacity', 'op', '不透明度');
+  bar.appendChild(rowC);
+
+  // ===== 配置タブ =====
+  const rowL = d.createElement('div');
+  rowL.className = 'cr-d-row';
+  rowL.dataset.tab = 'layout';
+  rowL.appendChild(mk('↑ 前へ', '並び順を1つ前へ', () => elNow() && commitDesignReorder(elNow(), -1, d)));
+  rowL.appendChild(mk('↓ 後ろへ', '並び順を1つ後ろへ', () => elNow() && commitDesignReorder(elNow(), +1, d)));
+  rowL.appendChild(sep());
+  rowL.appendChild(mk('⧉ 複製＋', 'このブロックの複製を1つ増やす', () => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    const cur = c && c.changes.duplicate ? c.changes.duplicate.count : 0;
+    commitDesignField(el, 'duplicate', { count: cur + 1 }, d);
+  }, 'dup'));
+  rowL.appendChild(mk('複製−', '複製を1つ減らす', () => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    const cur = c && c.changes.duplicate ? c.changes.duplicate.count : 0;
+    if (cur <= 0) return;
+    commitDesignField(el, 'duplicate', cur - 1 === 0 ? null : { count: cur - 1 }, d);
+  }));
+  rowL.appendChild(sep());
+  rowL.appendChild(mk('🗑 削除', 'このブロックを削除する指示にする（もう一度押すと取り消し）', () => {
+    const el = elNow(); if (!el) return;
+    const c = designEntryOf(el);
+    commitDesignField(el, 'removed', c && c.changes.removed ? null : true, d);
+  }, 'removed'));
+  rowL.appendChild(sep());
+  stepper(rowL, '余白−', '余白＋', 'padding', 'pad', '内側の余白');
+  bar.appendChild(rowL);
+
+  return bar;
+}
+
+function updateDesignTab(d) {
+  const bar = d.querySelector('.cr-d-bar');
+  if (!bar) return;
+  const tab = state.designTab || 'text';
+  bar.querySelectorAll('.cr-d-row').forEach((r) => { r.style.display = r.dataset.tab === tab ? '' : 'none'; });
+  bar.querySelectorAll('[data-tabkey]').forEach((b) => b.classList.toggle('on', b.dataset.tabkey === tab));
+  positionDesignOverlay();
 }
 
 function positionDesignOverlay() {
@@ -1333,17 +1828,241 @@ function positionDesignOverlay() {
   ov.style.width = r.width + 'px';
   ov.style.height = r.height + 'px';
   const bar = ov.querySelector('.cr-d-bar');
-  if (bar) bar.style.top = (r.top < 60 ? (r.height + 10) : -46) + 'px';
+  if (bar) {
+    const vw = iwin().innerWidth;
+    const vh = iwin().innerHeight;
+    const barH = bar.offsetHeight || 92;
+    // 縦：要素の上→下→（背の高い要素は）画面内上部に固定、の順で見える場所へ
+    let topPx;
+    if (r.top >= barH + 64) topPx = -(barH + 12);
+    else if (r.top + r.height + 12 + barH <= vh) topPx = r.height + 12;
+    else topPx = 56 - r.top; // バナーの下あたりに固定
+    bar.style.top = topPx + 'px';
+    // 横：画面からはみ出さないようにずらす
+    bar.style.marginLeft = '0px';
+    const br = bar.getBoundingClientRect();
+    let shift = 0;
+    if (br.left < 8) shift = 8 - br.left;
+    else if (br.right > vw - 8) shift = (vw - 8) - br.right;
+    if (shift) bar.style.marginLeft = shift + 'px';
+    // カラーパネルが開いていれば追従させる
+    const pop = ov.querySelector('.cr-d-pop');
+    if (pop) {
+      pop.style.top = (topPx + barH + 6) + 'px';
+      pop.style.marginLeft = '0px';
+      const pr = pop.getBoundingClientRect();
+      let ps = 0;
+      if (pr.left < 8) ps = 8 - pr.left;
+      else if (pr.right > vw - 8) ps = (vw - 8) - pr.right;
+      if (ps) pop.style.marginLeft = ps + 'px';
+    }
+  }
 }
 
 function updateDesignBar() {
   const d = idoc();
-  const pctEl = d && d.querySelector('.cr-d-pct');
-  if (!pctEl) return;
+  const bar = d && d.querySelector('.cr-d-bar');
+  if (!bar) return;
   const el = state.designSel;
-  const c = el && el.dataset.crDesign ? state.comments.find((x) => x.id === el.dataset.crDesign) : null;
-  const scale = c && c.changes.font ? c.changes.font.scale : 1;
-  pctEl.textContent = Math.round(scale * 100) + '%';
+  const c = designEntryOf(el);
+  const ch = (c && c.changes) || {};
+  const q = (role) => bar.querySelector(`[data-role="${role}"]`);
+  const setVal = (role, text) => { const n = q(role); if (n) n.textContent = text; };
+  const setOn = (role, on) => { const n = q(role); if (n) n.classList.toggle('on', !!on); };
+
+  // 文字タブ
+  setVal('pct', Math.round((ch.font ? ch.font.scale : 1) * 100) + '%');
+  for (const f of FONT_PRESETS) setOn('font-' + f.key, ch.fontFamily && ch.fontFamily.key === f.key);
+  setOn('bold', !!ch.fontWeight);
+  setOn('italic', !!ch.fontStyle);
+  const deco = ch.textDecoration || '';
+  setOn('underline', deco.includes('underline'));
+  setOn('line-through', deco.includes('line-through'));
+  setVal('lh', '行間' + Math.round((ch.lineHeight ? ch.lineHeight.scale : 1) * 100) + '%');
+  setVal('ls', '字間' + (ch.letterSpacing ? (ch.letterSpacing.em > 0 ? '+' : '') + ch.letterSpacing.em + 'em' : '標準'));
+  for (const a of ['left', 'center', 'right']) setOn('align-' + a, ch.textAlign === a);
+
+  // 色・枠タブ
+  const chip = (role, color) => { const n = q(role); if (n) { n.style.background = color || 'transparent'; n.classList.toggle('unset', !color); } };
+  chip('swchip-color', ch.color && ch.color.value);
+  chip('swchip-background', ch.background && ch.background.value);
+  chip('swchip-borderColor', ch.border && ch.border.color);
+  setOn('border-0', !ch.border);
+  setOn('border-2', ch.border && ch.border.width === 2);
+  setOn('border-4', ch.border && ch.border.width === 4);
+  setVal('rad', '角丸' + (ch.radius ? ch.radius.px + 'px' : 'なし'));
+  const shadowLevel = ch.shadow ? ch.shadow.level : 'none';
+  setVal('shadow', shadowLevel === 'none' ? '影' : (shadowLevel === 'soft' ? '影：弱' : '影：強'));
+  setOn('shadow', shadowLevel !== 'none');
+  setVal('op', '不透明' + Math.round((ch.opacity ? ch.opacity.value : 1) * 100) + '%');
+
+  // 配置タブ
+  const dupCount = ch.duplicate ? ch.duplicate.count : 0;
+  setVal('dup', dupCount ? `⧉ 複製＋(${dupCount})` : '⧉ 複製＋');
+  setOn('dup', dupCount > 0);
+  setOn('removed', !!ch.removed);
+  setVal('pad', '余白' + (ch.padding ? (ch.padding.delta > 0 ? '+' : '') + ch.padding.delta + 'px' : '±0'));
+
+  updateDesignTab(d);
+}
+
+/* ---------- カラーピッカー（Word風パレット＋スポイト） ---------- */
+
+const STD_COLORS = [
+  '#000000', '#44403a', '#7a736a', '#b1a899', '#ffffff',
+  '#c00000', '#e8702e', '#f2a93b', '#70ad47', '#2e9e8f', '#2e75b6', '#7030a0',
+  '#fbe4d5', '#fdf2cc', '#e2efda', '#dceff1', '#dce6f1', '#e8e0f0',
+];
+
+let docColorCache = null; // 読み込んだ資料ごとの抽出色（loadでリセット）
+
+function extractDocColors(d) {
+  if (docColorCache) return docColorCache;
+  const counts = new Map();
+  const toHex = (v) => {
+    const m = v && v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (!m) return null;
+    if (m[4] !== undefined && parseFloat(m[4]) < 0.5) return null; // ほぼ透明は除外
+    return '#' + [m[1], m[2], m[3]].map((x) => (+x).toString(16).padStart(2, '0')).join('');
+  };
+  const els = d.body.querySelectorAll('*');
+  for (let i = 0; i < els.length && i < 3000; i++) {
+    const t = els[i];
+    if (t.closest('.cr-design-overlay, .cr-design-banner, .cr-float, .cr-clone, mark.cr-mark, sup.cr-badge, ins.cr-ins')) continue;
+    const cs = getComputedStyle(t);
+    const c1 = toHex(cs.color);
+    if (c1) counts.set(c1, (counts.get(c1) || 0) + 1);
+    const c2 = toHex(cs.backgroundColor);
+    if (c2) counts.set(c2, (counts.get(c2) || 0) + 3); // 背景色は重み付け
+  }
+  docColorCache = [...counts.entries()].sort((a, b) => b[1] - a[1]).map((x) => x[0]).slice(0, 12);
+  return docColorCache;
+}
+
+function closeColorPanel(d) {
+  const pop = d.querySelector('.cr-d-pop');
+  if (pop) pop.remove();
+}
+
+function applyPickedColor(d, field, hex) {
+  const el = state.designSel;
+  if (!el) return;
+  if (hex) {
+    state.recentColors = [hex, ...(state.recentColors || []).filter((x) => x !== hex)].slice(0, 8);
+  }
+  if (field === 'color') commitDesignField(el, 'color', hex ? { value: hex } : null, d);
+  else if (field === 'background') commitDesignField(el, 'background', hex ? { value: hex } : null, d);
+  else if (field === 'borderColor') {
+    const c = designEntryOf(el);
+    const cur = c && c.changes.border;
+    if (hex) commitDesignField(el, 'border', { width: (cur && cur.width) || 2, color: hex }, d);
+    else if (cur) commitDesignField(el, 'border', { width: cur.width, color: '#e8702e' }, d); // 色だけ既定に戻す（枠は「枠なし」で外す）
+  }
+  updateDesignBar();
+}
+
+// スポイト：EyeDropper API（Chrome/Edge）。非対応ブラウザは資料内の要素から色を採取
+async function startEyedrop(d, field) {
+  const ED = (iwin() && iwin().EyeDropper) || window.EyeDropper;
+  if (ED) {
+    try {
+      const r = await new ED().open();
+      applyPickedColor(d, field, r.sRGBHex);
+    } catch (e) { /* ユーザーがESCでキャンセル */ }
+    return;
+  }
+  // フォールバック：資料内の要素クリックで色を採取するモード
+  toast('色を採取したい場所をクリックしてください（文字色はその文字の色、背景はその場所の背景色を拾います）');
+  closeColorPanel(d);
+  state.sampling = { field };
+  const bn = d.querySelector('.cr-design-banner');
+  if (bn) bn.classList.add('sampling');
+}
+
+function cancelSampling(d) {
+  state.sampling = null;
+  const bn = d && d.querySelector('.cr-design-banner');
+  if (bn) bn.classList.remove('sampling');
+}
+
+function effectiveBackground(el) {
+  let cur = el;
+  while (cur && cur.nodeType === 1) {
+    const bg = getComputedStyle(cur).backgroundColor;
+    const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (m && (m[4] === undefined || parseFloat(m[4]) > 0.1)) {
+      return '#' + [m[1], m[2], m[3]].map((x) => (+x).toString(16).padStart(2, '0')).join('');
+    }
+    cur = cur.parentElement;
+  }
+  return '#ffffff';
+}
+
+function openColorPanel(d, field) {
+  closeColorPanel(d);
+  const ov = d.querySelector('.cr-design-overlay');
+  const bar = ov && ov.querySelector('.cr-d-bar');
+  if (!bar) return;
+  const pop = d.createElement('div');
+  pop.className = 'cr-d-pop';
+  pop.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  const title = d.createElement('div');
+  title.className = 'cr-d-pop-title';
+  title.textContent = field === 'color' ? '文字色' : (field === 'background' ? '背景色' : '枠の色');
+  pop.appendChild(title);
+
+  const grid = (label, colors) => {
+    if (!colors.length) return;
+    const lab = d.createElement('div');
+    lab.className = 'cr-d-pop-label';
+    lab.textContent = label;
+    pop.appendChild(lab);
+    const g = d.createElement('div');
+    g.className = 'cr-d-grid';
+    for (const hex of colors) {
+      const b = d.createElement('button');
+      b.className = 'cr-d-cell';
+      b.style.background = hex;
+      b.title = hex;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        applyPickedColor(d, field, hex);
+        closeColorPanel(d);
+      });
+      g.appendChild(b);
+    }
+    pop.appendChild(g);
+  };
+  grid('この資料で使われている色', extractDocColors(d));
+  grid('標準の色', STD_COLORS);
+  grid('最近使った色', state.recentColors || []);
+
+  const tools = d.createElement('div');
+  tools.className = 'cr-d-pop-tools';
+  const mkT = (label, title, fn) => {
+    const b = d.createElement('button');
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+    tools.appendChild(b);
+  };
+  mkT('🎯 スポイト', '画面上の色を拾って指定する', () => startEyedrop(d, field));
+  const inp = d.createElement('input');
+  inp.type = 'color';
+  inp.title = '自由に色を選ぶ';
+  inp.addEventListener('input', () => { applyPickedColor(d, field, inp.value); });
+  inp.addEventListener('click', (e) => e.stopPropagation());
+  tools.appendChild(inp);
+  mkT('解除', 'この色指定を取り消して元に戻す', () => {
+    applyPickedColor(d, field, null);
+    closeColorPanel(d);
+  });
+  pop.appendChild(tools);
+
+  ov.appendChild(pop);
+  // パネルの位置：ツールバーの下
+  pop.style.top = (parseFloat(bar.style.top || '0') + bar.offsetHeight + 6) + 'px';
 }
 
 function selectDesignEl(el) {
@@ -1360,6 +2079,7 @@ function selectDesignEl(el) {
   }
   state.designSel = el;
   d.querySelectorAll('.cr-d-hover').forEach((x) => x.classList.remove('cr-d-hover'));
+  closeColorPanel(d);
   ensureDesignOverlay(d);
   positionDesignOverlay();
   updateDesignBar();
@@ -1379,6 +2099,7 @@ function toggleDesignMode() {
     state.designSel = null;
     state.drag = null;
     state.pickAtDown = null;
+    state.sampling = null;
     if (d) {
       const ov = d.querySelector('.cr-design-overlay');
       if (ov) ov.remove();
@@ -1479,6 +2200,7 @@ function updateDesignHover(e) {
   const d = idoc();
   if (!d) return;
   d.querySelectorAll('.cr-d-hover').forEach((x) => x.classList.remove('cr-d-hover'));
+  if (state.sampling) return; // 色採取中は「選択範囲の予告枠」を出さない（誤解防止）
   if (e.target.closest && e.target.closest('.cr-design-overlay, .cr-design-banner')) return;
   const el = designPickBlock(e.target, d);
   if (el && el !== state.designSel) el.classList.add('cr-d-hover');
@@ -1526,11 +2248,40 @@ function onDesignMouseUp(e) {
 
 function onDesignClick(e) {
   if (!state.designMode) return;
+  const d = idoc();
+  // スポイト採取モード：クリックした場所の色を拾う
+  if (state.sampling) {
+    e.preventDefault();
+    e.stopPropagation();
+    const { field } = state.sampling;
+    const src = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (src && src.closest && src.closest('.cr-design-banner')) {
+      // バナーをクリック＝採取の中止
+      cancelSampling(d);
+      toast('色の採取を中止しました');
+      return;
+    }
+    cancelSampling(d);
+    if (src && !src.closest('.cr-design-overlay, .cr-design-banner')) {
+      const hex = field === 'color'
+        ? (() => {
+            const m = getComputedStyle(src).color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+            return m ? '#' + [m[1], m[2], m[3]].map((x) => (+x).toString(16).padStart(2, '0')).join('') : null;
+          })()
+        : effectiveBackground(src);
+      if (hex) {
+        applyPickedColor(d, field, hex);
+        toast(`色を採取しました：${hex}`);
+      }
+    }
+    return;
+  }
   // オーバーレイ内（ツールバーのボタン等）・バナーは各自のリスナーに任せる
   if (e.target.closest && e.target.closest('.cr-design-overlay, .cr-design-banner')) return;
   e.preventDefault();
   e.stopPropagation();
-  const el = state.pickAtDown || designPickBlock(e.target, idoc());
+  closeColorPanel(d);
+  const el = state.pickAtDown || designPickBlock(e.target, d);
   state.pickAtDown = null;
   selectDesignEl(el);
 }
@@ -1867,10 +2618,8 @@ function buildOutput() {
         return { type: 'document', comment: c.comment, createdAt: c.createdAt };
       }
       if (c.type === 'design') {
-        const ch = {};
-        if (c.changes.move && (c.changes.move.dx || c.changes.move.dy)) ch.move = { dx: c.changes.move.dx, dy: c.changes.move.dy };
-        if (c.changes.size) ch.size = { ...c.changes.size };
-        if (c.changes.font) ch.font = { ...c.changes.font };
+        // changes はコミット時点で常に「意味のある値だけ」が入っている。そのまま写す
+        const ch = JSON.parse(JSON.stringify(c.changes));
         return { type: 'design', target: c.target, changes: ch, createdAt: c.createdAt };
       }
       // selection / edit：no は画面のバッジ番号と一致させる
@@ -2051,8 +2800,15 @@ window.__cr = {
     move: commitDesignMove,
     size: commitDesignSize,
     font: commitFontStep,
+    field: commitDesignField,
+    step: commitDesignStep,
+    stepConf: STEP_CONF,
+    reorder: commitDesignReorder,
+    colors: extractDocColors,
+    pickColor: applyPickedColor,
     find: findDesignTarget,
     summary: designSummary,
+    entryOf: designEntryOf,
   },
   addDocumentComment: (text) => {
     beginComposer('document', null);
