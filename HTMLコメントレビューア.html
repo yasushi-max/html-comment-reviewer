@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTMLコメントレビューア</title>
+<style>
+  :root {
+    --ink: #1f2430;
+    --soft: #6b7280;
+    --bg: #e9ebef;
+    --panel: #ffffff;
+    --hair: #e2e5ea;
+    --accent: #e8702e;
+    --accent-deep: #c9591e;
+    --header: #23272e;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+    background: var(--bg); color: var(--ink);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ===== ヘッダー ===== */
+  header {
+    flex: none; display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; background: var(--header); color: #f2f3f5;
+  }
+  header .brand { font-weight: 700; font-size: 15px; letter-spacing: 0.04em; white-space: nowrap; }
+  header .fileinfo {
+    flex: 1; min-width: 0; font-size: 12.5px; color: #aab0ba;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  header .fileinfo b { color: #fff; font-weight: 600; }
+  header button {
+    flex: none; appearance: none; border: 1px solid #4a505a; border-radius: 8px;
+    background: #31363f; color: #f2f3f5; font-size: 13px; padding: 7px 14px;
+    cursor: pointer; font-family: inherit; transition: background .15s;
+  }
+  header button:hover:not(:disabled) { background: #3c424d; }
+  header button:disabled { opacity: 0.45; cursor: default; }
+  header button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  header button.primary:hover:not(:disabled) { background: var(--accent-deep); }
+  header label.toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; color: #8a919c; cursor: pointer; user-select: none;
+  }
+
+  /* ===== 本体レイアウト ===== */
+  main { flex: 1; display: flex; min-height: 0; }
+  #docArea { flex: 1; min-width: 0; position: relative; display: flex; }
+  #docFrame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
+
+  /* ドロップゾーン（初期画面） */
+  #dropZone {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; color: var(--soft); text-align: center; padding: 40px; cursor: pointer;
+    transition: background .15s;
+  }
+  #dropZone .icon { font-size: 52px; }
+  #dropZone .t1 { font-size: 17px; font-weight: 600; color: var(--ink); }
+  #dropZone .t2 { font-size: 13.5px; line-height: 2; }
+  #dropZone.dragover { background: rgba(232,112,46,0.08); }
+  body.dragover #dropZone { background: rgba(232,112,46,0.08); }
+
+  /* ===== サイドバー ===== */
+  #sidebar {
+    flex: none; width: 360px; background: var(--panel);
+    border-left: 1px solid var(--hair);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .side-head {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px; border-bottom: 1px solid var(--hair);
+  }
+  .side-head .ttl { font-size: 14px; font-weight: 700; }
+  .side-head .cnt {
+    font-size: 12px; background: #f0f1f4; border-radius: 10px; padding: 2px 9px; color: var(--soft);
+  }
+  .side-head .sp { flex: 1; }
+  .side-head button {
+    appearance: none; border: 1px solid var(--hair); border-radius: 8px; background: #fff;
+    font-size: 12px; padding: 6px 10px; cursor: pointer; font-family: inherit; color: var(--ink);
+  }
+  .side-head button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-deep); }
+  .side-head button:disabled { opacity: 0.45; cursor: default; }
+
+  #cmtScroll { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+  #sideEmpty { font-size: 12.5px; color: var(--soft); line-height: 2.1; padding: 14px 6px; }
+  #sideEmpty b { color: var(--ink); }
+
+  /* コメント入力欄 */
+  #composer {
+    border: 1.5px solid var(--accent); border-radius: 10px; background: #fff7f2;
+    padding: 12px; display: flex; flex-direction: column; gap: 8px;
+  }
+  #composer .clabel { font-size: 12px; font-weight: 700; color: var(--accent-deep); }
+  #composer .cquote {
+    font-size: 12px; color: var(--soft); background: #fff; border: 1px solid var(--hair);
+    border-radius: 6px; padding: 6px 8px; line-height: 1.7;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  #composer textarea, .cmt textarea {
+    width: 100%; min-height: 72px; resize: vertical;
+    border: 1px solid var(--hair); border-radius: 8px; padding: 8px 10px;
+    font-family: inherit; font-size: 13px; line-height: 1.7;
+  }
+  #composer textarea:focus, .cmt textarea:focus { outline: 2px solid rgba(232,112,46,0.45); border-color: var(--accent); }
+  .btnrow { display: flex; gap: 8px; justify-content: flex-end; }
+  .btnrow button {
+    appearance: none; border-radius: 8px; font-size: 12.5px; padding: 7px 14px;
+    cursor: pointer; font-family: inherit; border: 1px solid var(--hair); background: #fff; color: var(--ink);
+  }
+  .btnrow button.add { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btnrow button.add:hover { background: var(--accent-deep); }
+  .btnrow .hint { margin-right: auto; align-self: center; font-size: 11px; color: var(--soft); }
+
+  /* コメントカード */
+  .cmt {
+    border: 1px solid var(--hair); border-radius: 10px; background: #fff;
+    padding: 11px 12px; display: flex; flex-direction: column; gap: 7px; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .cmt:hover { border-color: #c9ccd4; }
+  .cmt.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(232,112,46,0.18); }
+  .cmt .top { display: flex; align-items: center; gap: 8px; }
+  .cmt .num {
+    flex: none; min-width: 21px; height: 21px; border-radius: 11px; background: var(--accent);
+    color: #fff; font-size: 11.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; padding: 0 6px;
+  }
+  .cmt .num.doc { background: #5b6470; }
+  .cmt .num.edit { background: #43a047; }
+  .cmt .quote.strike { text-decoration: line-through; text-decoration-color: rgba(198,40,40,0.6); }
+  .cmt .body.rep { color: #2e7d32; font-weight: 500; }
+  .cmt .sec {
+    flex: 1; min-width: 0; font-size: 11px; color: var(--soft);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cmt .ops { flex: none; display: flex; gap: 2px; }
+  .cmt .ops button {
+    appearance: none; border: 0; background: none; font-size: 11.5px; color: var(--soft);
+    cursor: pointer; padding: 3px 5px; border-radius: 6px; font-family: inherit;
+  }
+  .cmt .ops button:hover { background: #f0f1f4; color: var(--ink); }
+  .cmt .quote {
+    font-size: 12px; color: var(--soft); border-left: 3px solid #f0c9ae; padding-left: 8px; line-height: 1.7;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .cmt .body { font-size: 13px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+  .cmt .warn { font-size: 11px; color: #b45309; background: #fef3c7; border-radius: 6px; padding: 5px 8px; line-height: 1.6; }
+
+  /* ===== 使い方ダイアログ ===== */
+  dialog {
+    border: 0; border-radius: 14px; padding: 0; max-width: 560px; width: calc(100vw - 48px);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.3);
+  }
+  dialog::backdrop { background: rgba(20,22,28,0.5); }
+  .dlg-in { padding: 26px 30px 24px; font-size: 13.5px; line-height: 2; }
+  .dlg-in h2 { margin: 0 0 14px; font-size: 17px; }
+  .dlg-in ol { margin: 0 0 12px; padding-left: 22px; }
+  .dlg-in li { margin-bottom: 8px; }
+  .dlg-in .say {
+    background: #f5f6f8; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 6px 0 12px;
+  }
+  .dlg-in .note { font-size: 12px; color: var(--soft); line-height: 1.9; border-top: 1px solid var(--hair); padding-top: 12px; }
+  .dlg-in .close-row { text-align: right; margin-top: 14px; }
+  .dlg-in .close-row button {
+    appearance: none; border: 0; border-radius: 8px; background: var(--header); color: #fff;
+    font-size: 13px; padding: 9px 22px; cursor: pointer; font-family: inherit;
+  }
+
+  /* ===== トースト ===== */
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+    background: var(--header); color: #fff; font-size: 13px; padding: 11px 20px;
+    border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 1000;
+    max-width: calc(100vw - 48px);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">📝 HTMLコメントレビューア</div>
+  <div class="fileinfo" id="fileInfo">ファイルが開かれていません</div>
+  <label class="toggle" id="scriptsToggleWrap" hidden title="資料が真っ白・表示が崩れる場合にオンにしてください（資料内のJavaScriptを実行します）">
+    <input type="checkbox" id="scriptsToggle"> スクリプトを実行（表示が崩れる資料用）
+  </label>
+  <button id="openBtn">📂 HTMLを開く</button>
+  <button id="saveBtn" class="primary" disabled>💾 コメント付きで保存</button>
+  <button id="helpBtn">？ 使い方</button>
+</header>
+
+<main>
+  <section id="docArea">
+    <div id="dropZone">
+      <div class="icon">📄</div>
+      <div class="t1">レビューしたいHTMLファイルをここにドラッグ＆ドロップ</div>
+      <div class="t2">またはクリックしてファイルを選択<br>
+        以前に保存した「◯◯_コメント付き.html」を開けば、コメントの続きから編集できます</div>
+    </div>
+    <iframe id="docFrame" sandbox="allow-same-origin" hidden></iframe>
+  </section>
+
+  <aside id="sidebar">
+    <div class="side-head">
+      <span class="ttl">コメント</span>
+      <span class="cnt" id="cmtCount">0</span>
+      <span class="sp"></span>
+      <button id="docCmtBtn" disabled>＋ 全体コメント</button>
+    </div>
+    <div id="cmtScroll">
+      <div id="composer" hidden>
+        <div class="clabel" id="composerLabel">選択箇所へのコメント</div>
+        <div class="cquote" id="composerQuote"></div>
+        <textarea id="composerText" placeholder="修正の指示を書いてください&#10;例：この表現をもっと簡潔に／数字を最新のものに直して"></textarea>
+        <div class="btnrow">
+          <span class="hint">⌘+Enter で追加</span>
+          <button id="composerCancel">キャンセル</button>
+          <button id="composerAdd" class="add">コメントを追加</button>
+        </div>
+      </div>
+      <div id="cmtList" style="display:contents"></div>
+      <div id="sideEmpty">
+        まだコメントはありません。<br><br>
+        <b>① 本文の直したい文字をマウスで選択</b><br>
+        <b>② 「💬 コメント」か「✏️ 直接修正」を選ぶ</b><br><br>
+        ・💬 コメント …「こう直して」という指示を書く（Wordのコメントと同じ感覚）<br>
+        ・✏️ 直接修正 … 修正後の文言を自分で入力する（Wordの変更履歴のように記録されます）<br><br>
+        文書全体への指示（例：全体的にトーンを柔らかく）は右上の「＋ 全体コメント」からどうぞ。
+      </div>
+    </div>
+  </aside>
+</main>
+
+<dialog id="helpDlg">
+  <div class="dlg-in">
+    <h2>使い方 — コメントを付けて、Claudeに直してもらう</h2>
+    <ol>
+      <li><b>HTML資料を開く</b>：「📂 HTMLを開く」かドラッグ＆ドロップ</li>
+      <li><b>コメント・修正を付ける</b>：直したい文字を選択 → 「💬 コメント」で指示を書くか、「✏️ 直接修正」で修正後の文言を自分で入力（Wordの変更履歴のように記録され、Claudeが反映時にそのまま置き換えます）。文書全体への指示は「＋ 全体コメント」</li>
+      <li><b>保存する</b>：「💾 コメント付きで保存」→ <b>「元の名前_コメント付き.html」</b>ができます（保存先を選ぶ画面が出た場合は選んだ場所に、出ない場合はダウンロードフォルダに入ります）</li>
+      <li><b>Claudeに渡す</b>：そのファイルをClaude Codeのチャットにドラッグして、こう頼むだけ：</li>
+    </ol>
+    <div class="say">「このファイルのコメントを反映して、修正版を作ってください」</div>
+    コメントの内容とClaudeへの処理手順はファイル内に自動で埋め込まれているので、これだけで伝わります。
+    <div class="note">
+      ・<b>保存したファイルを普通にブラウザで開いても、コメントは画面に表示されません</b>（ファイル内部に埋め込まれているため）。コメントの確認・追加・編集は、このツールで開き直してください。<br>
+      ・資料が<b>真っ白だったり表示が崩れる</b>場合は、右上の「スクリプトを実行」にチェックを入れてください（グラフや動きのある資料用）。自分で作った資料以外でオンにするのは避けてください。<br>
+      ・資料が画像を相対パスで参照している場合、ここでの表示では画像が出ないことがあります（コメント機能には影響ありません）。<br>
+      ・保存する前にこの画面を閉じようとすると確認が表示されます。
+    </div>
+    <div class="close-row"><button id="helpClose">閉じる</button></div>
+  </div>
+</dialog>
+
+<input type="file" id="fileInput" accept=".html,.htm,text/html" hidden>
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   HTMLコメントレビューア
+   - HTML資料にWord風のコメント（修正指示）を付けるツール
+   - 保存すると元のHTMLソースはそのまま、コメントだけが
+     JSONとして </body> 直前に埋め込まれる（Claudeが読んで修正する）
+   ============================================================ */
+
+const EMBED_MARKER = 'CLAUDE-REVIEW-INSTRUCTIONS';
+const EMBED_FORMAT = 'claude-review-comments';
+
+// HTMLパーサーがこのscript自体を途中で打ち切らないよう、タグ風の文字列は連結で作る
+const COMMENT_OPEN = '<' + '!--';
+const SCRIPT_OPEN = '<' + 'script';
+const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
+【Claudeへ：このファイルには修正指示コメントが埋め込まれています】
+すぐ下にある id="claude-comments" のscriptタグ（type="application/json"）のJSONに、
+ユーザーがレビューで付けた修正指示が入っています。次の手順で処理してください。
+1. JSONの comments 配列を読み、各コメントを反映する。
+   - type "selection": quote が指す箇所を comment の指示どおりに修正する。
+   - type "edit": quote が指す箇所の文言を replacement の文言にそのまま置き換える。
+     勝手な言い換えや追加はしない。HTMLタグが絡む場合は、画面に表示される文言が
+     replacement になるよう最小限のタグ調整のみ行う。
+   - type "document": 文書全体に対する指示として反映する。
+2. フィールドの意味:
+   - no: ユーザーが画面上で見ているコメント番号（本文ハイライトのバッジ番号と同じ）。
+     ユーザーが「コメント2を〜」と言及したらこの番号のこと。
+   - quote / prefix / suffix: いずれも「画面表示上のテキスト」（prefixはquote直前、
+     suffixは直後、各最大40文字）。HTMLソースとはタグの介在
+     （例: 重要な<strong>条項</strong>）・文字参照・改行や空白の違いで字面が
+     一致しないことがある。タグや空白の差を無視して該当箇所を探すこと。
+   - section: その箇所の近くの見出し、または「N番目のセクション（冒頭…）」という位置情報。
+3. quote が本文に複数回現れる場合は、prefix / suffix が一致する1箇所だけを修正し、
+   他の出現箇所は変更しない。quote が見つからない場合は section と prefix / suffix から
+   該当箇所を推定し、確信が持てなければそのコメントは保留して、最後に
+   「反映できなかったコメント」としてユーザーに報告する。
+4. すべての修正を終えたら、このコメントブロックと id="claude-comments" の
+   scriptタグを出力から削除する。
+5. ユーザーから特に指定がなければ、JSONの sourceFile の拡張子の前に「_修正版」を
+   付けた名前（例: 提案資料.html → 提案資料_修正版.html）で新規ファイルとして保存し、
+   受け取ったファイル自体は変更せずそのまま残す。
+-->`;
+
+const state = {
+  fileName: null,     // 開いたファイル名
+  cleanSource: null,  // コメントブロックを除いた元ソース（保存時はこれに再埋め込み）
+  sourceEncoding: 'utf-8', // 読み込み時に検出した文字コード（保存は常にUTF-8）
+  comments: [],       // {id, type:'selection'|'document', quote, prefix, suffix, section, comment, createdAt, anchored}
+  dirty: false,
+  nextId: 1,
+  pending: null,      // 入力中のコメント {type, range, anchor}
+  activeCid: null,
+  loadToken: 0,
+};
+
+const $ = (id) => document.getElementById(id);
+const frame = $('docFrame');
+
+/* ---------- iframe内に注入するスタイル ---------- */
+const IFRAME_CSS = `
+  mark.cr-mark {
+    background: rgba(255, 196, 87, 0.45) !important;
+    border-bottom: 2px solid rgba(232, 112, 46, 0.85);
+    color: inherit; cursor: pointer; padding: 0;
+  }
+  mark.cr-mark.cr-active { background: rgba(255, 152, 0, 0.6) !important; }
+  sup.cr-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 1.55em; height: 1.55em; padding: 0 0.3em;
+    border-radius: 1em; background: #e8702e; color: #fff !important;
+    font-size: 0.6em; font-weight: 700; font-family: -apple-system, sans-serif;
+    line-height: 1; vertical-align: super; margin-left: 0.25em;
+    cursor: pointer; user-select: none;
+  }
+  sup.cr-badge::after { content: attr(data-num); }
+  sup.cr-badge.cr-active { background: #c9591e; }
+  mark.cr-mark.cr-edit {
+    background: rgba(229, 57, 53, 0.13) !important;
+    border-bottom: none;
+    text-decoration: line-through;
+    text-decoration-color: rgba(198, 40, 40, 0.75);
+    text-decoration-thickness: 0.12em;
+  }
+  mark.cr-mark.cr-edit.cr-active { background: rgba(229, 57, 53, 0.3) !important; }
+  ins.cr-ins {
+    text-decoration: none; color: inherit;
+    background: rgba(67, 160, 71, 0.16);
+    border-bottom: 2px solid rgba(46, 125, 50, 0.7);
+    margin-left: 0.2em; padding: 0 0.12em;
+    cursor: pointer;
+  }
+  sup.cr-badge.cr-edit { background: #43a047; }
+  sup.cr-badge.cr-edit.cr-active { background: #2e7d32; }
+  .cr-float {
+    position: fixed; z-index: 2147483647; transform: translateX(-50%);
+    display: flex; background: #23272e; border-radius: 20px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35); user-select: none;
+    font-family: -apple-system, "Hiragino Sans", sans-serif;
+    overflow: hidden; line-height: 1.4;
+  }
+  .cr-float .cr-fbtn {
+    color: #fff; font-size: 13px; white-space: nowrap;
+    padding: 8px 14px; cursor: pointer;
+  }
+  .cr-float .cr-fbtn + .cr-fbtn { border-left: 1px solid rgba(255,255,255,0.25); }
+  .cr-float .cr-fbtn:hover { background: #e8702e; }
+  .cr-float .cr-fbtn-comment::after { content: "💬 コメント"; }
+  .cr-float .cr-fbtn-edit::after { content: "✏️ 直接修正"; }
+`;
+
+/* ============================================================
+   ファイルを開く
+   ============================================================ */
+
+async function readFileSmart(file) {
+  // 文字コードを推定して読む。UTF-8として正しく読めるならmetaの宣言より優先する
+  // （UTF-8として有効なバイト列が偶然他のコードであることはまずないため）
+  const buf = await file.arrayBuffer();
+  try {
+    return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), encoding: 'utf-8' };
+  } catch (e) { /* UTF-8ではない → metaのcharset宣言を見る */ }
+  const probe = new TextDecoder('utf-8').decode(buf.slice(0, 2048));
+  const m = probe.match(/charset=["']?\s*([\w-]+)/i);
+  const enc = m ? m[1].toLowerCase() : null;
+  if (enc && enc !== 'utf-8' && enc !== 'utf8') {
+    try { return { text: new TextDecoder(enc).decode(buf), encoding: enc }; } catch (e) { /* 不明な文字コード */ }
+  }
+  try {
+    const alt = new TextDecoder('shift_jis').decode(buf);
+    if (!alt.includes('�')) return { text: alt, encoding: 'shift_jis' };
+  } catch (e) { /* noop */ }
+  return { text: new TextDecoder('utf-8').decode(buf), encoding: 'utf-8' };
+}
+
+function extractEmbedded(source) {
+  // 既にコメントが埋め込まれたファイルなら、JSONを取り出してソースから除去する
+  // （手順コメントを先に除去してから、JSONのscriptタグを探す）
+  let data = null;
+  let src = source.replace(new RegExp('\\u003c!--\\s*' + EMBED_MARKER + '[\\s\\S]*?-->\\s*', 'g'), '');
+  const sm = src.match(/<script[^>]*\bid=["']claude-comments["'][^>]*>([\s\S]*?)<\/script>\s*/i);
+  if (sm) {
+    try { data = JSON.parse(sm[1]); } catch (e) { data = null; }
+    src = src.replace(sm[0], '');
+  }
+  return { src, data };
+}
+
+async function openFile(file) {
+  if (state.dirty &&
+      !confirm('保存していない変更があります。破棄して別のファイルを開きますか？')) {
+    return;
+  }
+  let text, encoding;
+  try {
+    ({ text, encoding } = await readFileSmart(file));
+  } catch (e) {
+    toast('ファイルを読み込めませんでした：' + e.message);
+    return;
+  }
+  const { src, data } = extractEmbedded(text);
+  state.fileName = file.name;
+  state.cleanSource = src;
+  state.sourceEncoding = encoding;
+  state.comments = [];
+  state.nextId = 1;
+  state.dirty = false;
+  state.pending = null;
+  state.activeCid = null;
+  $('composer').hidden = true;
+
+  if (data && data.format === EMBED_FORMAT && Array.isArray(data.comments)) {
+    for (const c of data.comments) {
+      if (!c || (typeof c.comment !== 'string' && typeof c.replacement !== 'string')) continue;
+      const type = c.type === 'document' ? 'document' : (c.type === 'edit' ? 'edit' : 'selection');
+      state.comments.push({
+        id: 'c' + (state.nextId++),
+        type,
+        quote: c.quote || '',
+        prefix: c.prefix || '',
+        suffix: c.suffix || '',
+        section: c.section || '',
+        comment: typeof c.comment === 'string' ? c.comment : '',
+        replacement: typeof c.replacement === 'string' ? c.replacement : '',
+        createdAt: c.createdAt || new Date().toISOString(),
+        anchored: false,
+      });
+    }
+  }
+
+  await renderDoc();
+  const notes = [];
+  if (state.comments.length) notes.push(`${state.comments.length}件のコメントを読み込みました`);
+  if (encoding !== 'utf-8') notes.push(`文字コード ${encoding.toUpperCase()} を検出しました（保存時はUTF-8に変換されます）`);
+  if (notes.length) toast(notes.join('　／　'));
+}
+
+/* ============================================================
+   ドキュメントの表示（iframe）
+   ============================================================ */
+
+function renderDoc() {
+  return new Promise((resolve) => {
+    const token = ++state.loadToken;
+    const scripts = $('scriptsToggle').checked;
+    frame.setAttribute('sandbox', scripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
+    $('dropZone').style.display = 'none';
+    frame.hidden = false;
+
+    frame.onload = () => {
+      if (token !== state.loadToken) return;
+      try {
+        setupIframe();
+      } catch (e) {
+        console.error(e);
+        toast('表示の準備でエラーが起きました：' + e.message);
+      }
+      resolve();
+    };
+    frame.srcdoc = state.cleanSource;
+  });
+}
+
+function idoc() { return frame.contentDocument; }
+function iwin() { return frame.contentWindow; }
+
+function setupIframe() {
+  const d = idoc();
+  // スタイル注入
+  const st = d.createElement('style');
+  st.textContent = IFRAME_CSS;
+  (d.head || d.documentElement).appendChild(st);
+
+  // 選択 → フローティングボタン
+  d.addEventListener('mouseup', () => setTimeout(updateFloatBtn, 10));
+  d.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift' || e.key.startsWith('Arrow')) setTimeout(updateFloatBtn, 10);
+  });
+  d.addEventListener('mousedown', (e) => {
+    if (!e.target.closest || !e.target.closest('.cr-float')) hideFloatBtn();
+  });
+  iwin().addEventListener('scroll', hideFloatBtn, true);
+  iwin().addEventListener('resize', hideFloatBtn);
+
+  // ハイライト／バッジのクリック → サイドバーと同期
+  // リンクは無効化（クリックでiframeが別ページへ遷移してレビュー画面が壊れるのを防ぐ）
+  d.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (a) {
+      e.preventDefault();
+      toast('レビュー中はリンクを開けません');
+    }
+    const t = e.target.closest && e.target.closest('mark.cr-mark, sup.cr-badge, ins.cr-ins');
+    if (t) {
+      e.preventDefault();
+      selectComment(t.dataset.cid, { scrollSide: true });
+    }
+  });
+
+  // 資料の上にもファイルをドラッグ＆ドロップで開けるように
+  // （preventDefaultしないとブラウザがドロップしたファイルへ遷移してしまう）
+  d.addEventListener('dragover', (e) => e.preventDefault());
+  d.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) openFile(f);
+  });
+
+  // 既存コメントを本文に再アンカー
+  for (const c of state.comments) {
+    if (c.type !== 'selection' && c.type !== 'edit') continue;
+    const r = findRangeForAnchor(c, d);
+    c.anchored = r ? wrapRange(r, c.id, d) : false;
+    if (c.anchored && c.type === 'edit') decorateEdit(c, d);
+  }
+  refresh();
+  updateHeader();
+}
+
+/* ---------- フローティング「コメントを付ける」ボタン ---------- */
+
+function currentSelectionRange() {
+  const sel = iwin() && iwin().getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0);
+  if (!r.toString().trim()) return null;
+  // 直接修正の新文言（緑の部分）の中だけを選択している場合は対象外
+  // （文書本来のテキストではないため、コメントや再修正は元の文言側に付けてもらう）
+  const ca = r.commonAncestorContainer;
+  const el = ca.nodeType === 1 ? ca : ca.parentElement;
+  if (el && el.closest && el.closest('.cr-ins, .cr-float')) return null;
+  return r;
+}
+
+function updateFloatBtn() {
+  const d = idoc();
+  if (!d) return;
+  const r = currentSelectionRange();
+  if (!r) { hideFloatBtn(); return; }
+  let btn = d.querySelector('.cr-float');
+  if (!btn) {
+    btn = d.createElement('div');
+    btn.className = 'cr-float';
+    btn.addEventListener('mousedown', (e) => e.preventDefault()); // 選択を消さない
+    const bc = d.createElement('span');
+    bc.className = 'cr-fbtn cr-fbtn-comment';
+    bc.addEventListener('click', () => onFloatClick('selection'));
+    const be = d.createElement('span');
+    be.className = 'cr-fbtn cr-fbtn-edit';
+    be.addEventListener('click', () => onFloatClick('edit'));
+    btn.append(bc, be);
+    d.body.appendChild(btn);
+  }
+  const rect = r.getBoundingClientRect();
+  const vw = iwin().innerWidth, vh = iwin().innerHeight;
+  let top = rect.bottom + 10;
+  if (top > vh - 56) top = Math.max(8, rect.top - 48);
+  let left = rect.left + rect.width / 2;
+  left = Math.min(Math.max(left, 110), vw - 110);
+  btn.style.top = top + 'px';
+  btn.style.left = left + 'px';
+}
+
+function hideFloatBtn() {
+  const d = idoc();
+  const btn = d && d.querySelector('.cr-float');
+  if (btn) btn.remove();
+}
+
+function onFloatClick(type) {
+  const r = currentSelectionRange();
+  if (!r) { hideFloatBtn(); return; }
+  beginComposer(type, r.cloneRange());
+  hideFloatBtn();
+}
+
+/* ============================================================
+   アンカー（コメント位置の記録と復元）
+   ============================================================ */
+
+function normText(s) { return (s || '').replace(/\s+/g, ' ').trim(); }
+
+// テキストノード境界を buildTextIndex の raw 文字列内オフセットに変換する
+function rawBoundary(idx, container, offset) {
+  if (container.nodeType !== 3) return null;
+  const e = idx.entries.find((en) => en.node === container);
+  return e ? e.start + offset : null;
+}
+
+function computeAnchorFromRange(range, d) {
+  // quote / prefix / suffix はすべて再アンカー時の照合(buildTextIndex)と同じテキストから取る。
+  // Range.toString() を使うと、.cr-ins（直接修正の新文言）や script/style の
+  // テキストが混入し、保存ファイルに存在しない引用ができてしまう。
+  const idx = buildTextIndex(d);
+  const s = rawBoundary(idx, range.startContainer, range.startOffset);
+  const e = rawBoundary(idx, range.endContainer, range.endOffset);
+  let quote, prefix, suffix;
+  if (s !== null && e !== null && e >= s) {
+    quote = idx.raw.slice(s, e);
+    prefix = idx.raw.slice(Math.max(0, s - 40), s);
+    suffix = idx.raw.slice(e, e + 40);
+  } else {
+    // 選択端がテキストノードでない場合（トリプルクリック等）のフォールバック。
+    // cloneContentsから挿入物を除いてテキストを取る
+    const textOfRange = (r) => {
+      const frag = r.cloneContents();
+      if (frag.querySelectorAll) {
+        frag.querySelectorAll('.cr-ins, .cr-float, script, style').forEach((el) => el.remove());
+      }
+      return frag.textContent || '';
+    };
+    quote = textOfRange(range);
+    const body = d.body;
+    const r1 = d.createRange();
+    r1.setStart(body, 0);
+    r1.setEnd(range.startContainer, range.startOffset);
+    prefix = textOfRange(r1).slice(-40);
+    const r2 = d.createRange();
+    r2.setStart(range.endContainer, range.endOffset);
+    r2.setEnd(body, body.childNodes.length);
+    suffix = textOfRange(r2).slice(0, 40);
+  }
+  return { quote, prefix, suffix, section: findSection(range, d) };
+}
+
+function findSection(range, d) {
+  let el = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  if (!el) return '';
+  const sec = el.closest('section, article');
+  // 直前の見出し（h1〜h6）を探す。セクション内にいる場合は同じセクション内の見出しに限る
+  let best = null;
+  for (const h of d.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+    if (sec && !sec.contains(h)) continue;
+    const pos = h.compareDocumentPosition(el);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) best = h;
+  }
+  if (best) return normText(best.textContent).slice(0, 60);
+  // 見出しがなければ何番目のセクション（スライド）かと冒頭テキストを記録
+  if (sec) {
+    const all = [...d.querySelectorAll(sec.tagName.toLowerCase())];
+    const i = all.indexOf(sec);
+    const head = normText(sec.textContent).slice(0, 25);
+    if (i >= 0) return `${i + 1}番目のセクション${head ? `（${head}…）` : ''}`;
+  }
+  return '';
+}
+
+// 本文の全テキストを連結し、空白を正規化した文字列と位置の対応表を作る
+function buildTextIndex(d) {
+  const entries = [];
+  let raw = '';
+  const walker = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      const p = n.parentElement;
+      // .cr-ins（直接修正の新文言）は文書本来のテキストではないので除外する
+      if (p && p.closest('script, style, .cr-float, .cr-ins')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    entries.push({ node: n, start: raw.length, end: raw.length + n.data.length });
+    raw += n.data;
+  }
+  let norm = '';
+  const map = [];
+  let lastSpace = true;
+  for (let i = 0; i < raw.length; i++) {
+    if (/\s/.test(raw[i])) {
+      if (!lastSpace) { norm += ' '; map.push(i); lastSpace = true; }
+    } else {
+      norm += raw[i]; map.push(i); lastSpace = false;
+    }
+  }
+  return { raw, norm, map, entries };
+}
+
+function sharedSuffixLen(a, b) {
+  let n = 0;
+  while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+  return n;
+}
+function sharedPrefixLen(a, b) {
+  let n = 0;
+  while (n < a.length && n < b.length && a[n] === b[n]) n++;
+  return n;
+}
+
+function findRangeForAnchor(anchor, d) {
+  const needle = normText(anchor.quote);
+  if (!needle) return null;
+  const idx = buildTextIndex(d);
+  const positions = [];
+  let p = idx.norm.indexOf(needle);
+  while (p !== -1) { positions.push(p); p = idx.norm.indexOf(needle, p + 1); }
+  if (!positions.length) return null;
+
+  let bestPos = positions[0];
+  if (positions.length > 1) {
+    // 注意: trimしない。選択が要素境界で始まる/終わる場合、境界の空白(正規化後の' ')が
+    // 一致の手がかりになる。trimすると全候補が同点になり先頭の出現に誤アンカーする。
+    const pre = (anchor.prefix || '').replace(/\s+/g, ' ');
+    const suf = (anchor.suffix || '').replace(/\s+/g, ' ');
+    let bestScore = -1;
+    for (const pos of positions) {
+      let score = 0;
+      if (pre) score += sharedSuffixLen(idx.norm.slice(Math.max(0, pos - pre.length), pos), pre);
+      if (suf) score += sharedPrefixLen(idx.norm.slice(pos + needle.length, pos + needle.length + suf.length), suf);
+      if (score > bestScore) { bestScore = score; bestPos = pos; }
+    }
+  }
+
+  const rawStart = idx.map[bestPos];
+  const rawEnd = idx.map[bestPos + needle.length - 1] + 1;
+  const startE = idx.entries.find((e) => rawStart >= e.start && rawStart < e.end);
+  const endE = idx.entries.find((e) => rawEnd > e.start && rawEnd <= e.end);
+  if (!startE || !endE) return null;
+  const r = d.createRange();
+  r.setStart(startE.node, rawStart - startE.start);
+  r.setEnd(endE.node, rawEnd - endE.start);
+  return r;
+}
+
+/* ============================================================
+   ハイライト（mark要素で囲む）
+   ============================================================ */
+
+function wrapRange(range, cid, d) {
+  // 範囲に含まれるテキストノードを集める
+  let nodes = [];
+  const ca = range.commonAncestorContainer;
+  if (ca.nodeType === 3) {
+    // 単一テキストノードの場合も除外規則（.cr-ins等）を適用する
+    const p = ca.parentElement;
+    nodes = (p && p.closest('script, style, .cr-float, .cr-ins')) ? [] : [ca];
+  } else {
+    const walker = d.createTreeWalker(ca, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!range.intersectsNode(n)) return NodeFilter.FILTER_REJECT;
+        const p = n.parentElement;
+        if (p && p.closest('script, style, .cr-float, .cr-ins')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+  }
+
+  // DOM変更でrangeが動く前に境界を控えておく
+  const sc = range.startContainer, so = range.startOffset;
+  const ec = range.endContainer, eo = range.endOffset;
+
+  const marks = [];
+  for (const node of nodes) {
+    const r = d.createRange();
+    r.selectNodeContents(node);
+    if (node === sc && sc.nodeType === 3) r.setStart(node, so);
+    if (node === ec && ec.nodeType === 3) r.setEnd(node, eo);
+    if (!r.toString().trim()) continue; // 空白だけのノードは囲まない（レイアウト崩れ防止）
+    const mark = d.createElement('mark');
+    mark.className = 'cr-mark';
+    mark.dataset.cid = cid;
+    try { r.surroundContents(mark); marks.push(mark); } catch (e) { /* 囲めない構造はスキップ */ }
+  }
+
+  if (marks.length) {
+    // 番号バッジは最後のハイライトの内側に置く（flexレイアウトを崩さないため）
+    const sup = d.createElement('sup');
+    sup.className = 'cr-badge';
+    sup.dataset.cid = cid;
+    sup.dataset.num = '';
+    marks[marks.length - 1].appendChild(sup);
+  }
+  return marks.length > 0;
+}
+
+// 直接修正の表示：旧文言に取り消し線クラスを付け、直後に新文言(ins)を挿入する
+function decorateEdit(c, d) {
+  const marks = d.querySelectorAll(`mark.cr-mark[data-cid="${c.id}"]`);
+  marks.forEach((m) => m.classList.add('cr-edit'));
+  d.querySelectorAll(`sup.cr-badge[data-cid="${c.id}"]`).forEach((b) => b.classList.add('cr-edit'));
+  if (!marks.length) return;
+  const ins = d.createElement('ins');
+  ins.className = 'cr-ins';
+  ins.dataset.cid = c.id;
+  ins.textContent = c.replacement;
+  // 既存の取り消し線(mark.cr-edit)の内側に挿入すると新文言にも取り消し線が
+  // 伝播してしまうため、いちばん外側のmarkの直後に挿入する
+  let anchorEl = marks[marks.length - 1];
+  while (anchorEl.parentElement && anchorEl.parentElement.closest('mark.cr-mark')) {
+    anchorEl = anchorEl.parentElement.closest('mark.cr-mark');
+  }
+  anchorEl.insertAdjacentElement('afterend', ins);
+}
+
+function unwrapComment(cid, d) {
+  d.querySelectorAll(`ins.cr-ins[data-cid="${cid}"]`).forEach((el) => el.remove());
+  d.querySelectorAll(`sup.cr-badge[data-cid="${cid}"]`).forEach((b) => b.remove());
+  d.querySelectorAll(`mark.cr-mark[data-cid="${cid}"]`).forEach((m) => {
+    const p = m.parentNode;
+    while (m.firstChild) p.insertBefore(m.firstChild, m);
+    m.remove();
+    p.normalize();
+  });
+}
+
+/* ============================================================
+   コメントの追加・編集・削除
+   ============================================================ */
+
+function beginComposer(type, range) {
+  const d = idoc();
+  if (type === 'selection' || type === 'edit') {
+    state.pending = { type, range, anchor: computeAnchorFromRange(range, d) };
+    $('composerLabel').textContent = type === 'edit'
+      ? '選択箇所を直接修正（文言の置き換え）'
+      : '選択箇所へのコメント';
+    $('composerQuote').textContent = '「' + normText(state.pending.anchor.quote) + '」';
+    $('composerQuote').style.display = '';
+  } else {
+    state.pending = { type: 'document', range: null, anchor: null };
+    $('composerLabel').textContent = '文書全体へのコメント';
+    $('composerQuote').style.display = 'none';
+  }
+  // 直接修正は元の文言を下書きにして、書き換えてもらう
+  $('composerText').value = type === 'edit' ? normText(state.pending.anchor.quote) : '';
+  $('composerText').placeholder = type === 'edit'
+    ? '修正後の文言に書き換えてください'
+    : '修正の指示を書いてください\n例：この表現をもっと簡潔に／数字を最新のものに直して';
+  $('composerAdd').textContent = type === 'edit' ? '修正を登録' : 'コメントを追加';
+  $('composer').hidden = false;
+  $('sideEmpty').style.display = 'none';
+  $('composerText').focus();
+  if (type === 'edit') $('composerText').select();
+}
+
+function cancelComposer() {
+  state.pending = null;
+  $('composer').hidden = true;
+  refresh();
+}
+
+function submitComposer() {
+  const text = $('composerText').value.trim();
+  if (!text) { toast('コメントの内容を入力してください'); $('composerText').focus(); return; }
+  const p = state.pending;
+  if (!p) return;
+  if (p.type === 'edit' && text === normText(p.anchor.quote)) {
+    toast('元の文言と同じです。修正後の文言に書き換えてください');
+    $('composerText').focus();
+    return;
+  }
+  const c = {
+    id: 'c' + (state.nextId++),
+    type: p.type,
+    quote: p.anchor ? p.anchor.quote : '',
+    prefix: p.anchor ? p.anchor.prefix : '',
+    suffix: p.anchor ? p.anchor.suffix : '',
+    section: p.anchor ? p.anchor.section : '',
+    comment: p.type === 'edit' ? '' : text,
+    replacement: p.type === 'edit' ? text : '',
+    createdAt: new Date().toISOString(),
+    anchored: false,
+  };
+  if ((p.type === 'selection' || p.type === 'edit') && p.range) {
+    try { c.anchored = wrapRange(p.range, c.id, idoc()); } catch (e) { c.anchored = false; }
+    if (!c.anchored) {
+      // クリック後にDOMが変わった等でrangeが使えなければ、アンカー情報から復元を試みる
+      const r = findRangeForAnchor(c, idoc());
+      c.anchored = r ? wrapRange(r, c.id, idoc()) : false;
+    }
+    if (c.anchored && c.type === 'edit') decorateEdit(c, idoc());
+  }
+  state.comments.push(c);
+  state.pending = null;
+  state.dirty = true;
+  $('composer').hidden = true;
+  refresh();
+  selectComment(c.id, { scrollSide: true });
+}
+
+function deleteComment(cid) {
+  const i = state.comments.findIndex((c) => c.id === cid);
+  if (i === -1) return;
+  if (!confirm('このコメントを削除しますか？')) return;
+  const d = idoc();
+  if (d) unwrapComment(cid, d);
+  state.comments.splice(i, 1);
+  if (state.activeCid === cid) state.activeCid = null;
+  state.dirty = true;
+  refresh();
+}
+
+function updateCommentText(cid, text) {
+  const c = state.comments.find((x) => x.id === cid);
+  if (!c) return;
+  if (c.type === 'edit') {
+    c.replacement = text;
+    const d = idoc();
+    if (d) d.querySelectorAll(`ins.cr-ins[data-cid="${cid}"]`).forEach((el) => { el.textContent = text; });
+  } else {
+    c.comment = text;
+  }
+  state.dirty = true;
+  refresh();
+}
+
+/* ============================================================
+   表示の更新（番号の振り直し＋サイドバー）
+   ============================================================ */
+
+function orderedComments() {
+  // 本文中の出現順に番号を振る。全体コメントは先頭、位置不明のものは末尾。
+  const d = idoc();
+  const docCmts = state.comments.filter((c) => c.type === 'document');
+  const selCmts = state.comments.filter((c) => c.type === 'selection' || c.type === 'edit');
+  const order = [];
+  if (d) {
+    d.querySelectorAll('mark.cr-mark').forEach((m) => {
+      if (!order.includes(m.dataset.cid)) order.push(m.dataset.cid);
+    });
+  }
+  const anchored = order.map((cid) => selCmts.find((c) => c.id === cid)).filter(Boolean);
+  const unanchored = selCmts.filter((c) => !anchored.includes(c));
+  return [...docCmts, ...anchored, ...unanchored];
+}
+
+function refresh() {
+  const d = idoc();
+  // 編集中の下書きがあれば退避し、再描画後に編集状態ごと復元する（入力消失防止）
+  const prevTa = document.querySelector('.cmt textarea');
+  const editing = prevTa ? { cid: prevTa.closest('.cmt').dataset.cid, draft: prevTa.value } : null;
+  const list = orderedComments();
+  const selList = list.filter((c) => c.type === 'selection' || c.type === 'edit');
+
+  // バッジの番号を更新
+  if (d) {
+    selList.forEach((c, i) => {
+      d.querySelectorAll(`sup.cr-badge[data-cid="${c.id}"]`).forEach((b) => { b.dataset.num = String(i + 1); });
+    });
+  }
+
+  // サイドバー描画
+  const wrap = $('cmtList');
+  wrap.innerHTML = '';
+  for (const c of list) {
+    const num = c.type === 'document' ? '全体' : String(selList.indexOf(c) + 1);
+    const card = document.createElement('div');
+    card.className = 'cmt' + (state.activeCid === c.id ? ' active' : '');
+    card.dataset.cid = c.id;
+
+    const top = document.createElement('div');
+    top.className = 'top';
+    const numEl = document.createElement('span');
+    numEl.className = 'num' + (c.type === 'document' ? ' doc' : (c.type === 'edit' ? ' edit' : ''));
+    numEl.textContent = num;
+    const secEl = document.createElement('span');
+    secEl.className = 'sec';
+    secEl.textContent = c.type === 'document' ? '文書全体'
+      : (c.type === 'edit' ? '✏️ ' : '') + (c.section || '');
+    const ops = document.createElement('span');
+    ops.className = 'ops';
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '編集';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); enterEdit(card, c); });
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '削除';
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteComment(c.id); });
+    ops.append(editBtn, delBtn);
+    top.append(numEl, secEl, ops);
+    card.appendChild(top);
+
+    if ((c.type === 'selection' || c.type === 'edit') && c.quote) {
+      const q = document.createElement('div');
+      q.className = 'quote' + (c.type === 'edit' ? ' strike' : '');
+      q.textContent = normText(c.quote);
+      card.appendChild(q);
+    }
+
+    const body = document.createElement('div');
+    body.className = c.type === 'edit' ? 'body rep' : 'body';
+    body.textContent = c.type === 'edit' ? '→ ' + c.replacement : c.comment;
+    card.appendChild(body);
+
+    if ((c.type === 'selection' || c.type === 'edit') && !c.anchored) {
+      const w = document.createElement('div');
+      w.className = 'warn';
+      w.textContent = '⚠ 本文中の該当箇所をハイライトできませんでした（コメント自体は保存され、Claudeへの指示としては有効です）';
+      card.appendChild(w);
+    }
+
+    card.addEventListener('click', () => selectComment(c.id, { scrollDoc: true }));
+    wrap.appendChild(card);
+  }
+
+  if (editing) {
+    const card = wrap.querySelector(`.cmt[data-cid="${editing.cid}"]`);
+    const c = state.comments.find((x) => x.id === editing.cid);
+    if (card && c) {
+      enterEdit(card, c);
+      const ta = card.querySelector('textarea');
+      if (ta) ta.value = editing.draft;
+    }
+  }
+
+  $('cmtCount').textContent = String(state.comments.length);
+  $('sideEmpty').style.display = (list.length || state.pending) ? 'none' : '';
+  updateHeader();
+}
+
+function enterEdit(card, c) {
+  const body = card.querySelector('.body');
+  if (!body || card.querySelector('textarea')) return;
+  const ta = document.createElement('textarea');
+  ta.value = c.type === 'edit' ? c.replacement : c.comment;
+  const row = document.createElement('div');
+  row.className = 'btnrow';
+  const cancel = document.createElement('button');
+  cancel.textContent = 'キャンセル';
+  // refreshは編集中textareaを復元するため、閉じる操作では先にtextareaを取り除く
+  cancel.addEventListener('click', (e) => { e.stopPropagation(); ta.remove(); refresh(); });
+  const save = document.createElement('button');
+  save.textContent = '保存';
+  save.className = 'add';
+  save.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const v = ta.value.trim();
+    if (!v) { toast('コメントの内容を入力してください'); ta.focus(); return; }
+    ta.remove();
+    updateCommentText(c.id, v);
+  });
+  row.append(cancel, save);
+  body.replaceWith(ta, row);
+  ta.addEventListener('click', (e) => e.stopPropagation());
+  ta.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save.click();
+    if (e.key === 'Escape') { ta.remove(); refresh(); }
+  });
+  ta.focus();
+}
+
+function selectComment(cid, opts = {}) {
+  state.activeCid = cid;
+  const d = idoc();
+  if (d) {
+    d.querySelectorAll('.cr-active').forEach((el) => el.classList.remove('cr-active'));
+    const marks = d.querySelectorAll(`[data-cid="${cid}"]`);
+    marks.forEach((m) => m.classList.add('cr-active'));
+    if (opts.scrollDoc && marks.length) {
+      marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+  document.querySelectorAll('.cmt').forEach((el) => {
+    el.classList.toggle('active', el.dataset.cid === cid);
+  });
+  if (opts.scrollSide) {
+    const card = document.querySelector(`.cmt[data-cid="${cid}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function updateHeader() {
+  const fi = $('fileInfo');
+  if (!state.fileName) {
+    fi.textContent = 'ファイルが開かれていません';
+  } else {
+    fi.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = state.fileName;
+    fi.appendChild(b);
+    fi.appendChild(document.createTextNode(
+      `　コメント ${state.comments.length}件${state.dirty ? '（未保存）' : ''}`
+    ));
+  }
+  $('saveBtn').disabled = !state.fileName;
+  $('docCmtBtn').disabled = !state.fileName;
+  $('scriptsToggleWrap').hidden = !state.fileName;
+}
+
+/* ============================================================
+   保存（元ソース＋コメントJSONの埋め込み）
+   ============================================================ */
+
+function buildOutput() {
+  const ordered = orderedComments();
+  const sels = ordered.filter((c) => c.type === 'selection' || c.type === 'edit');
+  const payload = {
+    format: EMBED_FORMAT,
+    version: 1,
+    sourceFile: baseName() + '.html',
+    savedAt: new Date().toISOString(),
+    note: 'HTMLコメントレビューアが埋め込んだ修正指示。処理手順とフィールドの意味は直前のHTMLコメント(CLAUDE-REVIEW-INSTRUCTIONS)を参照。no は画面上のコメント番号（本文中のバッジ番号）と対応。',
+    comments: ordered.map((c) => ({
+      // no は画面のバッジ番号と一致させる（本文に紐づくコメント・修正のみの連番。全体コメントは番号なし）
+      ...(c.type !== 'document' ? { no: sels.indexOf(c) + 1 } : {}),
+      type: c.type,
+      ...(c.type !== 'document' ? {
+        quote: c.quote,
+        prefix: c.prefix,
+        suffix: c.suffix,
+        section: c.section,
+      } : {}),
+      ...(c.type === 'edit' ? { replacement: c.replacement } : { comment: c.comment }),
+      createdAt: c.createdAt,
+    })),
+  };
+  // "<" をすべてエスケープして script 終了タグの誤検出を防ぐ
+  const json = JSON.stringify(payload, null, 2).replace(/</g, '\\u003c');
+  // 先頭に余分な改行を入れない（開き直し→再保存で改行が増えないように）
+  const block = INSTRUCTION_COMMENT +
+    '\n' + SCRIPT_OPEN + ' type="application/json" id="claude-comments">\n' + json + '\n</' + 'script>\n';
+
+  let src = state.cleanSource;
+  if (state.sourceEncoding && state.sourceEncoding !== 'utf-8') {
+    // 保存バイト列は常にUTF-8になるため、charset宣言も合わせて書き換える（文字化け防止）
+    const head = src.slice(0, 4096);
+    src = head.replace(/(charset\s*=\s*["']?)([\w-]+)/i, '$1UTF-8') + src.slice(4096);
+  }
+  const lower = src.toLowerCase();
+  let at = lower.lastIndexOf('</body>');
+  if (at === -1) at = lower.lastIndexOf('</html>');
+  if (at === -1) return src + block;
+  return src.slice(0, at) + block + src.slice(at);
+}
+
+function baseName() {
+  return (state.fileName || 'document')
+    .replace(/\.html?$/i, '')
+    .replace(/_コメント付き$/, '');
+}
+
+async function saveFile() {
+  if (!state.fileName) return;
+  if (!state.comments.length &&
+      !confirm('コメントが1件もありません。このまま保存しますか？')) {
+    return;
+  }
+  const out = buildOutput();
+  const name = baseName() + '_コメント付き.html';
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: 'HTMLファイル', accept: { 'text/html': ['.html'] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(out);
+      await w.close();
+      state.dirty = false;
+      refresh();
+      toast(`保存しました：${handle.name || name}　→ このファイルをClaudeに渡してください（コメントの確認はこのツールで開き直し）`);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      // 失敗したらダウンロードにフォールバック
+    }
+  }
+  const blob = new Blob([out], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  state.dirty = false;
+  refresh();
+  toast(`「${name}」をダウンロードしました　→ このファイルをClaudeに渡してください（コメントの確認はこのツールで開き直し）`);
+}
+
+/* ============================================================
+   UIまわり
+   ============================================================ */
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4500);
+}
+
+$('openBtn').addEventListener('click', () => $('fileInput').click());
+$('dropZone').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (f) openFile(f);
+  e.target.value = '';
+});
+
+$('saveBtn').addEventListener('click', saveFile);
+$('docCmtBtn').addEventListener('click', () => beginComposer('document', null));
+$('composerAdd').addEventListener('click', submitComposer);
+$('composerCancel').addEventListener('click', cancelComposer);
+$('composerText').addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitComposer();
+  if (e.key === 'Escape') cancelComposer();
+});
+
+$('helpBtn').addEventListener('click', () => $('helpDlg').showModal());
+$('helpClose').addEventListener('click', () => $('helpDlg').close());
+
+$('scriptsToggle').addEventListener('change', async () => {
+  if (!state.fileName) return;
+  await renderDoc(); // 再描画 → setupIframe内でコメントを再アンカー
+});
+
+// ドラッグ＆ドロップ（画面のどこに落としてもOK）
+['dragover', 'dragenter'].forEach((ev) =>
+  document.addEventListener(ev, (e) => {
+    e.preventDefault();
+    document.body.classList.add('dragover');
+  })
+);
+['dragleave', 'drop'].forEach((ev) =>
+  document.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (ev === 'drop' || e.target === document.body || !e.relatedTarget) {
+      document.body.classList.remove('dragover');
+    }
+    if (ev === 'drop') {
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) openFile(f);
+    }
+  })
+);
+
+window.addEventListener('beforeunload', (e) => {
+  if (state.dirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+// 動作確認・自動テスト用の内部API（通常の利用では使いません）
+window.__cr = {
+  state, openFile, buildOutput, renderDoc, refresh,
+  findRangeForAnchor, wrapRange, extractEmbedded, normText,
+  loadFromText: async (name, text) => {
+    const fake = new File([text], name, { type: 'text/html' });
+    await openFile(fake);
+  },
+  addSelectionComment: (range, text) => {
+    beginComposer('selection', range);
+    $('composerText').value = text;
+    submitComposer();
+  },
+  addEditComment: (range, replacement) => {
+    beginComposer('edit', range);
+    $('composerText').value = replacement;
+    submitComposer();
+  },
+  addDocumentComment: (text) => {
+    beginComposer('document', null);
+    $('composerText').value = text;
+    submitComposer();
+  },
+  idoc, iwin,
+};
+</script>
+</body>
+</html>
