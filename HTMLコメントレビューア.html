@@ -468,11 +468,36 @@ async function openFile(file) {
    ドキュメントの表示（iframe）
    ============================================================ */
 
+// 表示専用のスクリプト除去。iframeのsandbox属性は環境（ブラウザの種類・file://・
+// 各種プレビュー画面）によってcontentDocumentへのアクセスを遮断することがあるため
+// 使わず、資料のスクリプトはレンダリング前にソースから取り除く方式にする。
+// ※保存用の state.cleanSource には一切手を加えない（これは表示専用のコピー）
+function sanitizeForDisplay(src) {
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(src, 'text/html');
+  } catch (e) {
+    return src;
+  }
+  if (!doc || !doc.documentElement) return src;
+  doc.querySelectorAll('script').forEach((el) => el.remove());
+  doc.querySelectorAll('meta[http-equiv]').forEach((el) => {
+    if (/refresh/i.test(el.getAttribute('http-equiv') || '')) el.remove(); // 自動ページ遷移を防ぐ
+  });
+  for (const el of doc.querySelectorAll('*')) {
+    for (const a of [...el.attributes]) {
+      if (/^on/i.test(a.name)) el.removeAttribute(a.name); // onclick等のインラインJSを無効化
+      else if ((a.name === 'href' || a.name === 'src') && /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name);
+    }
+  }
+  return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+}
+
 function renderDoc() {
   return new Promise((resolve) => {
     const token = ++state.loadToken;
     const scripts = $('scriptsToggle').checked;
-    frame.setAttribute('sandbox', scripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
+    frame.removeAttribute('sandbox');
     $('dropZone').style.display = 'none';
     frame.hidden = false;
 
@@ -486,7 +511,7 @@ function renderDoc() {
       }
       resolve();
     };
-    frame.srcdoc = state.cleanSource;
+    frame.srcdoc = scripts ? state.cleanSource : sanitizeForDisplay(state.cleanSource);
   });
 }
 
@@ -495,6 +520,11 @@ function iwin() { return frame.contentWindow; }
 
 function setupIframe() {
   const d = idoc();
+  if (!d) {
+    // ブラウザやビューワの制限で資料の中身へアクセスできない場合
+    toast('この環境では資料の中身にアクセスできませんでした。ツールのHTMLファイルをパソコンに保存して、ダブルクリックで開き直してから資料を読み込んでください');
+    return;
+  }
   // スタイル注入
   const st = d.createElement('style');
   st.textContent = IFRAME_CSS;
