@@ -229,7 +229,7 @@
         <div class="cquote" id="composerQuote"></div>
         <textarea id="composerText" placeholder="修正の指示を書いてください&#10;例：この表現をもっと簡潔に／数字を最新のものに直して"></textarea>
         <div class="btnrow">
-          <span class="hint">⌘+Enter で追加</span>
+          <span class="hint" id="composerHint">Ctrl+Enter で追加</span>
           <button id="composerCancel">キャンセル</button>
           <button id="composerAdd" class="add">コメントを追加</button>
         </div>
@@ -288,6 +288,10 @@
 const EMBED_MARKER = 'CLAUDE-REVIEW-INSTRUCTIONS';
 const EMBED_FORMAT = 'claude-review-comments';
 
+// キー表記の出し分け（Windows/Linuxでは Ctrl、Mac では ⌘）。利用者はWindowsが多い
+const IS_MAC = /Mac|iPhone|iPod|iPad/i.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''));
+const MOD_KEY_LABEL = IS_MAC ? '⌘' : 'Ctrl';
+
 // HTMLパーサーがこのscript自体を途中で打ち切らないよう、タグ風の文字列は連結で作る
 const COMMENT_OPEN = '<' + '!--';
 const SCRIPT_OPEN = '<' + 'script';
@@ -295,8 +299,22 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
 【Claudeへ：このファイルには修正指示コメントが埋め込まれています】
 すぐ下にある id="claude-comments" のscriptタグ（type="application/json"）のJSONに、
 ユーザーがレビューで付けた修正指示が入っています。次の手順で処理してください。
-1. JSONの comments 配列を読み、各コメントを反映する。
-   - type "selection": quote が指す箇所を comment の指示どおりに修正する。
+
+■ 進め方（順序が大切）
+A. まず comments 配列を全件読み、各コメントの対象箇所を「まだ何も直していない本文」で
+   先に特定・記録する。quote / prefix / suffix / textHead / section は画面表示時の
+   テキストから採取した値なので、先に本文を書き換えると後続コメントの手がかりが失われる。
+B. 対象を押さえたうえで selection・edit・design を反映する。
+C. type "document"（文書全体への指示）は、個別の修正をすべて終えた最後に適用する
+   （例「全体をですます調に」を先に当てると個別の quote が一致しなくなるため）。
+D. 同じ箇所に複数のコメントが重なるときは、全部を読んでから一つの修正にまとめる。
+   指示が矛盾する場合は具体的な指示を優先し（edit ＞ selection ＞ document）、
+   その結果反映できなかった指示は最後に報告する。
+
+■ コメントの種類（type）
+   - type "selection": quote が指す箇所を comment の指示どおりに修正する。comment が
+     修正指示ではなく質問・確認（例「この数字は合っている？」）のときは、本文を勝手に
+     書き換えず、報告の中で回答する。
    - type "edit": quote が指す箇所の文言を replacement の文言にそのまま置き換える。
      勝手な言い換えや追加はしない。HTMLタグが絡む場合は、画面に表示される文言が
      replacement になるよう最小限のタグ調整のみ行う。
@@ -304,19 +322,27 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
      classes / textHead / section）で対象要素を特定し、changes の各項目を反映する。
      px値は画面上の実測値なので「数値の書き写し」ではなく、その文書のスタイル
      設計（変数・単位・配置方法）に合った自然なCSSで同じ見た目を実現すること。
-     ・move.dx/dy: 右／下へ動かしたpx（負は左／上）。マージンや配置の調整で実現
+     ・move.dx/dy: 右／下へ動かしたpx（負は左／上）。マージンや配置の調整で実現。
+       同じエントリに size があるとき、move はサイズ変更後も左上が画面上ほぼ同じ位置に
+       見えるための補正を含むことがある。レイアウトが位置を自動で決める実装（中央寄せ等）
+       にする場合は、最終的な見た目の位置を基準にし、move.px を機械的に足し込まない
      ・size.widthPx/heightPx: 変更後の実測サイズ（origWidthPx/origHeightPxが変更前。
-       比率に換算して % や fr 等で表現してよい）
-     ・font.scale: 文字サイズの倍率（origPx=変更前の実測px）
+       比率に換算して % や fr 等で表現してよい）。orig と同じ値の辺は「変えていない辺」
+       なので固定しない。中身の量で高さが決まる要素では幅（比率）を優先し、height の
+       固定は見た目維持に必要なときだけにする
+     ・font.scale: 文字サイズの倍率（origPx=変更前の実測px）。対象要素の中で font-size を
+       個別指定している子孫も、同じ倍率で調整する（ツールは子孫ごとに実測px×倍率で
+       表示している）
      ・fontFamily.label/stack: フォント変更。stackを参考に、文書の既存フォント指定の
        方式に合わせて反映する。webfont がある場合は Google Fonts の読み込み
        （https://fonts.googleapis.com/css2?family=<webfont>&display=swap）を
        <head> に追加した上で適用する
-     ・fontWeight("bold") / fontStyle("italic") / textDecoration("underline"等) /
+     ・fontWeight("bold") / fontStyle("italic") / textDecoration（"underline" 等。
+       "underline line-through" のような空白区切りの複合値もある） /
        textAlign("left|center|right")
      ・lineHeight.scale: 行間の倍率 ／ letterSpacing.em: 字間（em単位）
      ・color.value / background.value: 文字色・背景色（hex）
-     ・border{width,color} / radius.px / shadow.level("soft|strong") /
+     ・border{width(px),color} / radius.px / shadow.level("soft|strong") /
        opacity.value / padding.delta(内側余白の増減px)
      ・removed:true → この要素を削除する ／ duplicate.count → 直後に複製をn個追加
      ・reorder.shift → 兄弟要素の中で並び順をn個後ろへ（負は前へ）移動
@@ -330,33 +356,41 @@ const INSTRUCTION_COMMENT = COMMENT_OPEN + ` ${EMBED_MARKER} v1
      適用の規則: (1) designコメントが複数ある場合は comments 配列の順に適用する
      （特にreorderは先行エントリ適用後の並びを基準にした値）。
      (2) duplicate の複製は、同じエントリの他の変更（色・フォント等）を反映した
-     状態のものを作る。(3) removed指定の要素も reorder の数では1つと数える
-     （削除は並べ替えの後に行う）。
+     状態のものを作る。他エントリの複製で増えた要素は reorder の移動数に数えない。
+     (3) removed指定の要素も reorder の数では1つと数える（削除は並べ替えの後に行う）。
      反映の結果ほかの要素と重なる・はみ出す場合は、周囲の余白等も含めて
      自然に調整してよい。
-     注意: target の selector / textHead は表示時のDOMから採取した値のため、
-     ソースと完全には一致しないことがある（スクリプトで内容を生成する資料は特に）。
-     selector で特定できない場合は textHead（タグ・空白の差を無視して照合）→
-     tag / classes / section の順で対象を推定し、確信が持てなければそのコメントは
-     保留して、最後に「反映できなかったコメント」として報告する。
-   - type "document": 文書全体に対する指示として反映する。
-2. フィールドの意味:
+   - type "document": 文書全体に対する指示として、個別修正の後に反映する。
+
+■ 対象箇所の探し方・見つからないときの扱い
+   - quote は選択された文言の全文、prefix は quote の直前、suffix は直後で、prefix/suffix
+     は各最大40文字。いずれも「画面表示上のテキスト」で、HTMLソースとはタグの介在
+     （例: 重要な<strong>条項</strong>）・文字参照・改行や空白の違いで字面が一致しない
+     ことがある。タグや空白の差を無視して該当箇所を探すこと。スクリプトで内容を生成する
+     資料では quote 自体がソースに無いこともある。
+   - section は近くの見出し、または「N番目のセクション（冒頭…）」という位置情報。
+   - quote が本文に複数回現れる場合は、prefix / suffix が一致する1箇所だけを修正し、
+     他の出現箇所は変更しない。
+   - design の target が selector で特定できない、または2件以上に一致する場合は、
+     textHead（タグ・空白の差を無視した前方一致）→ tag / classes / section の順で推定する。
+   - 以上でも対象を特定できない・確信が持てないコメントは、近い場所へ当て推量で反映せず
+     「保留」にして、最後に報告する。
+
+■ フィールドの意味
    - no: ユーザーが画面上で見ているコメント番号（本文ハイライトのバッジ番号と同じ）。
      ユーザーが「コメント2を〜」と言及したらこの番号のこと。
-   - quote / prefix / suffix: いずれも「画面表示上のテキスト」（prefixはquote直前、
-     suffixは直後、各最大40文字）。HTMLソースとはタグの介在
-     （例: 重要な<strong>条項</strong>）・文字参照・改行や空白の違いで字面が
-     一致しないことがある。タグや空白の差を無視して該当箇所を探すこと。
-   - section: その箇所の近くの見出し、または「N番目のセクション（冒頭…）」という位置情報。
-3. quote が本文に複数回現れる場合は、prefix / suffix が一致する1箇所だけを修正し、
-   他の出現箇所は変更しない。quote が見つからない場合は section と prefix / suffix から
-   該当箇所を推定し、確信が持てなければそのコメントは保留して、最後に
-   「反映できなかったコメント」としてユーザーに報告する。
-4. すべての修正を終えたら、このコメントブロックと id="claude-comments" の
-   scriptタグを出力から削除する。
-5. ユーザーから特に指定がなければ、JSONの sourceFile の拡張子の前に「_修正版」を
+   - format / version / savedAt / createdAt / note: 処理には使わないメタ情報。
+
+■ 仕上げ
+1. すべてのコメントの反映を試みたら、保留の有無にかかわらず、このコメントブロックと
+   id="claude-comments" のscriptタグを出力から必ず削除する
+   （次に渡されたとき同じ修正が二重に適用されるのを防ぐため）。
+2. 出力に CLAUDE-REVIEW-INSTRUCTIONS と id="claude-comments" が残っていないこと、
+   受け取ったファイルを（この埋め込みブロックの削除以外）変えていないことを確認する。
+3. ユーザーから特に指定がなければ、JSONの sourceFile の拡張子の前に「_修正版」を
    付けた名前（例: 提案資料.html → 提案資料_修正版.html）で新規ファイルとして保存し、
    受け取ったファイル自体は変更せずそのまま残す。
+4. 最後に、各コメント（no または対象）ごとに「反映した／保留（理由）」の一覧を報告する。
 -->`;
 
 const state = {
@@ -607,7 +641,10 @@ function extractEmbedded(source) {
   const sm = src.match(/<script[^>]*\bid=["']claude-comments["'][^>]*>([\s\S]*?)<\/script>\s*/i);
   if (sm) {
     try { data = JSON.parse(sm[1]); } catch (e) { data = null; }
-    src = src.replace(sm[0], '');
+    // このツールが埋め込んだブロックだと確認できたときだけ元ソースから取り除く
+    // （利用者の資料が偶然この id の script を持っていても消さない）
+    if (data && data.format === EMBED_FORMAT) src = src.replace(sm[0], '');
+    else data = null;
   }
   return { src, data };
 }
@@ -634,7 +671,12 @@ async function openFile(file) {
   state.pending = null;
   state.activeCid = null;
   $('composer').hidden = true;
+  // 別ファイルを開くたびにスクリプト実行はオフへ戻す（前の資料の設定を持ち越さない）
+  $('scriptsToggle').checked = false;
 
+  if (data && +data.version > 1) {
+    toast('このファイルはこのツールより新しい形式のようです。保存すると一部の指示が失われる可能性があります');
+  }
   if (data && data.format === EMBED_FORMAT && Array.isArray(data.comments)) {
     for (const c of data.comments) {
       if (!c) continue;
@@ -712,15 +754,18 @@ async function openFile(file) {
         });
         continue;
       }
+      // 既知の種類だけ受け入れる（未知の type は黙って selection 化せずスキップ）
+      if (c.type !== 'selection' && c.type !== 'edit' && c.type !== 'document') continue;
       if (typeof c.comment !== 'string' && typeof c.replacement !== 'string') continue;
-      const type = c.type === 'document' ? 'document' : (c.type === 'edit' ? 'edit' : 'selection');
+      // 文字列フィールドは必ず文字列化する（細工・破損ファイルで数値やオブジェクトが
+      // 入っていても、後段の文字列処理でクラッシュしないように）
       state.comments.push({
         id: 'c' + (state.nextId++),
-        type,
-        quote: c.quote || '',
-        prefix: c.prefix || '',
-        suffix: c.suffix || '',
-        section: c.section || '',
+        type: c.type,
+        quote: String(c.quote || ''),
+        prefix: String(c.prefix || ''),
+        suffix: String(c.suffix || ''),
+        section: String(c.section || ''),
         comment: typeof c.comment === 'string' ? c.comment : '',
         replacement: typeof c.replacement === 'string' ? c.replacement : '',
         createdAt: c.createdAt || new Date().toISOString(),
@@ -1296,12 +1341,15 @@ function findDesignTarget(t, d) {
   if (t.selector) {
     try {
       const els = [...d.querySelectorAll(t.selector)].filter((el) => !el.closest('.cr-clone'));
-      if (els.length === 1) return els[0];
-      if (els.length > 1) {
+      if (els.length >= 1) {
         if (t.textHead) {
+          // textHead があれば内容も照合する。複製プレビュー等で :nth-of-type が
+          // ずれ、1件だけ別要素を拾ってしまった場合に、先頭テキストの不一致で気づける
           for (const el of els) if (designTextHead(el).startsWith(t.textHead.slice(0, 20))) return el;
+          // どれも一致しない → セレクタがずれた可能性。下の textHead 探索へ委ねる
+        } else {
+          return els[0];
         }
-        return els[0];
       }
     } catch (e) { /* 不正なセレクタは無視してフォールバックへ */ }
   }
@@ -1407,9 +1455,13 @@ function applyFontScale(el, scale, d) {
 
 function applyLineHeightScale(el, scale, fontScale) {
   // 文字サイズ変更後に基準を初測定する場合に備え、フォント倍率で割り戻して
-  // 「元のフォントサイズ時の行間」を基準として記録する（保存往復でのズレ防止）
+  // 「元のフォントサイズ時の行間」を基準として記録する（保存往復でのズレ防止）。
   const fs = fontScale || 1;
-  applySubtreeScale(el, 'line-height', 'crOlh', scale, (t) => {
+  // 適用時はフォント倍率を掛け戻す。こうしないと、文字を拡大した状態で「行間＋」を
+  // 押したとき、行間が元フォント基準の固定pxのままになって逆に詰まり、行が重なる。
+  // 行間が中立(scale=1)のときは触らない（1のまま渡して復元／スキップさせる）。
+  const applyScale = scale === 1 ? 1 : scale * fs;
+  applySubtreeScale(el, 'line-height', 'crOlh', applyScale, (t) => {
     const cs = getComputedStyle(t);
     const lh = parseFloat(cs.lineHeight);
     // line-height:normal は数値にならないため、フォントサイズ×1.4を基準にする
@@ -2535,6 +2587,7 @@ function toggleDesignMode() {
   hideFloatBtn();
   cancelComposer();
   if (!state.designMode) {
+    flushPendingDrag(); // 未確定ドラッグの後始末（空エントリの残留防止）
     state.designSel = null;
     state.drag = null;
     state.pickAtDown = null;
@@ -2708,6 +2761,19 @@ function onDesignMouseUp(e) {
   }
   e.preventDefault();
   e.stopPropagation();
+}
+
+// 未確定のドラッグ操作の後始末（デザイン調整の終了・保存の直前に呼ぶ）。
+// iframeの外でボタンを離してそのまま終了/保存すると、確定されない移動量が残って
+// 「変更なし」の空エントリが保存されてしまう。それを防ぐ。
+function flushPendingDrag() {
+  const d = idoc();
+  if (!d || !state.drag) return;
+  const g = state.drag;
+  state.drag = null;
+  const c = state.comments.find((x) => x.id === g.entryId);
+  // コミット済みの changes の姿に戻す（未確定分は破棄）。空エントリはここで掃除される
+  if (c) finishDesignCommit(c, g.el, d, JSON.stringify(c.changes));
 }
 
 function onDesignClick(e) {
@@ -3126,11 +3192,14 @@ function buildOutput() {
     '\n' + SCRIPT_OPEN + ' type="application/json" id="claude-comments">\n' + json + '\n</' + 'script>\n';
 
   let src = state.cleanSource;
-  if (state.sourceEncoding && state.sourceEncoding !== 'utf-8') {
-    // 保存バイト列は常にUTF-8になるため、charset宣言も合わせて書き換える（文字化け防止）
-    const head = src.slice(0, 4096);
-    src = head.replace(/(charset\s*=\s*["']?)([\w-]+)/i, '$1UTF-8') + src.slice(4096);
-  }
+  // 保存バイト列は常にUTF-8。ソースの <meta> の charset 宣言が UTF-8 以外なら、それも
+  // UTF-8 へ書き換える（日本語の埋め込み部が旧宣言で文字化けするのを防ぐ）。中身がASCII
+  // だけで sourceEncoding が utf-8 と判定された資料でも、宣言が別物なら書き換える。
+  // <meta> 内の charset だけを対象にし、本文中の charset= という表記は書き換えない。
+  src = src.replace(
+    /(<meta\b[^>]*?charset\s*=\s*["']?\s*)([\w-]+)/i,
+    (whole, pre, enc) => (/^utf-?8$/i.test(enc) ? whole : pre + 'UTF-8')
+  );
   const lower = src.toLowerCase();
   let at = lower.lastIndexOf('</body>');
   if (at === -1) at = lower.lastIndexOf('</html>');
@@ -3146,6 +3215,13 @@ function baseName() {
 
 async function saveFile() {
   if (!state.fileName) return;
+  // 保存前に未確定の操作を確定させる（入力途中のテキスト・ドラッグ途中の取りこぼし防止）
+  const dsave = idoc();
+  if (dsave && dsave.activeElement && dsave.activeElement.classList &&
+      dsave.activeElement.classList.contains('cr-textbox')) {
+    dsave.activeElement.blur();
+  }
+  flushPendingDrag();
   if (!state.comments.length &&
       !confirm('コメントが1件もありません。このまま保存しますか？')) {
     return;
@@ -3258,6 +3334,9 @@ window.addEventListener('beforeunload', (e) => {
     e.returnValue = '';
   }
 });
+
+// プラットフォームに合わせてキー表記を出し分ける（Windowsユーザーに⌘を見せない）
+{ const h = $('composerHint'); if (h) h.textContent = MOD_KEY_LABEL + '+Enter で追加'; }
 
 // 動作確認・自動テスト用の内部API（通常の利用では使いません）
 window.__cr = {
