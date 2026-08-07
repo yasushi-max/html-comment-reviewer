@@ -174,6 +174,34 @@
     background: #f5f6f8; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 6px 0 12px;
   }
   .dlg-in .note { font-size: 12px; color: var(--soft); line-height: 1.9; border-top: 1px solid var(--hair); padding-top: 12px; }
+  /* 保存のしかたを選ぶ画面 */
+  .fin-lead { margin: 0 0 10px; }
+  .fin-list {
+    border: 1px solid var(--hair); border-radius: 8px; padding: 8px 12px;
+    margin: 0 0 16px; max-height: 220px; overflow: auto; font-size: 12.5px; line-height: 1.9;
+  }
+  .fin-row { padding: 5px 0; border-bottom: 1px dashed var(--hair); }
+  .fin-row:last-child { border-bottom: 0; }
+  .fin-no { color: var(--soft); }
+  .fin-ctx { color: var(--soft); }
+  .fin-old { text-decoration: line-through; color: #c0392b; }
+  .fin-new { color: #1e8449; font-weight: 600; }
+  .fin-warn {
+    background: #fff6f1; border: 1px solid #f0c4a6; border-radius: 8px;
+    padding: 11px 14px; margin: 0 0 16px; font-size: 12.5px; line-height: 1.9;
+  }
+  .fin-why { margin: 6px 0 8px; padding-left: 20px; }
+  .fin-opt { border: 1px solid var(--hair); border-radius: 10px; padding: 13px 15px 14px; margin-bottom: 11px; }
+  .fin-opt h3 { margin: 0 0 5px; font-size: 14px; }
+  .fin-opt p { margin: 0 0 7px; font-size: 12.5px; color: var(--soft); line-height: 1.8; }
+  .fin-opt .fin-rest { color: #b4530f; }
+  .fin-opt .fname { font-size: 12px; color: var(--soft); margin-bottom: 9px; word-break: break-all; }
+  .fin-opt button {
+    border: 0; border-radius: 7px; padding: 8px 16px; font-size: 13px; font-weight: 600;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .fin-opt button:hover { filter: brightness(1.08); }
+  .fin-note { font-size: 12px; color: var(--soft); border-top: 1px solid var(--hair); padding-top: 11px; }
   .dlg-in .close-row { text-align: right; margin-top: 14px; }
   .dlg-in .close-row button {
     appearance: none; border: 0; border-radius: 8px; background: var(--header); color: #fff;
@@ -257,7 +285,10 @@
       <li><b>デザインを調整する</b>：「🎨 デザイン調整」を押してから、ブロックをクリックで選択。ドラッグで移動、四隅のハンドルでサイズ変更ができ、ツールバーのタブで細かく調整できます
         — <b>文字</b>（フォント・大きさ・太字・下線・行間・字間・揃え）／<b>色・枠</b>（文字色・背景・外枠・角丸・影。色はパレットやスポイト🎯で選択）／<b>配置</b>（並べ替え・複製・削除・余白・行頭文字●✓・📝テキスト追加）。
         調整内容は指示として記録され、Claudeが反映時にレイアウトを壊さない自然な形で本実装します。もう一度ボタンを押すと通常モードに戻ります</li>
-      <li><b>保存する</b>：「💾 コメント付きで保存」→ <b>「元の名前_コメント付き.html」</b>ができます（保存先を選ぶ画面が出た場合は選んだ場所に、出ない場合はダウンロードフォルダに入ります）</li>
+      <li><b>保存する</b>：「💾 コメント付きで保存」→ <b>「元の名前_コメント付き.html」</b>ができます（保存先を選ぶ画面が出た場合は選んだ場所に、出ない場合はダウンロードフォルダに入ります）。
+        <b>「✏️ 直接修正」が付いているときは、保存のしかたを選ぶ画面</b>が出ます
+        — <b>コメント付きで保存</b>（Claudeに渡す）か、<b>確定して保存</b>（直接修正だけをその場で反映し、そのまま読める・印刷できる<b>「元の名前_確定版.html」</b>を作る。Claudeに渡す必要はありません）。
+        語尾を直すような軽微な修正だけの日は、確定して保存すればそこで完成です</li>
       <li><b>Claudeに渡す</b>：そのファイルをClaude Codeのチャットにドラッグして、こう頼むだけ：</li>
     </ol>
     <div class="say">「このファイルのコメントを反映して、修正版を作ってください」</div>
@@ -266,9 +297,19 @@
       ・<b>保存したファイルを普通にブラウザで開いても、コメントは画面に表示されません</b>（ファイル内部に埋め込まれているため）。コメントの確認・追加・編集は、このツールで開き直してください。<br>
       ・資料が<b>真っ白だったり表示が崩れる</b>場合は、右上の「スクリプトを実行」にチェックを入れてください（グラフや動きのある資料用）。自分で作った資料以外でオンにするのは避けてください。<br>
       ・資料が画像を相対パスで参照している場合、ここでの表示では画像が出ないことがあります（コメント機能には影響ありません）。<br>
-      ・保存する前にこの画面を閉じようとすると確認が表示されます。
+      ・保存する前にこの画面を閉じようとすると確認が表示されます。<br>
+      ・<b>「確定して保存」は、直接修正が全部その場で直せるときだけ選べます</b>。太字やリンクをまたぐ修正・短すぎる選択（5文字未満）などが1つでもあると、「一部だけ直った中途半端なファイル」を作らないため、その回は選べません（理由が画面に出ます）。その場合はコメント付きで保存してClaudeにお願いしてください。<br>
+      ・確定して保存すると、その内容は元に戻せません（元のファイルはそのまま残ります）。書き込む前に、変わる箇所を一覧で確認できます。
     </div>
     <div class="close-row"><button id="helpClose">閉じる</button></div>
+  </div>
+</dialog>
+
+<dialog id="finalDlg">
+  <div class="dlg-in">
+    <h2>保存のしかたを選んでください</h2>
+    <div id="finalBody"></div>
+    <div class="close-row"><button id="finalCancel">やめる</button></div>
   </div>
 </dialog>
 
@@ -3151,6 +3192,321 @@ function updateHeader() {
 }
 
 /* ============================================================
+   その場確定（直接修正を元のHTMLに書き込んで仕上げる）
+   ------------------------------------------------------------
+   考え方: 元HTMLの中から文言を「探して」置き換えるのは危険。同じ文字列が
+   別の場所や属性値(alt="..."等)の中にあり得るし、タグ(<strong>等)で分断
+   されていると素朴な検索では見つからない。
+   そこで「探さない」設計にする:
+     1. 元HTMLのテキスト実体を、ソース内の位置つきで取り出した対応表を作る
+     2. 画面に表示されているテキストと1文字も違わないことを確認する（入口の関門）
+     3. 画面上で位置が確定している箇所（ハイライト）だけを、対応表で
+        ソース上の位置に変換して書き換える
+   さらに、書き換え後に本文・タグ構造・ブラウザ解析の3通りで検証し、
+   1つでも合わなければ1バイトも書かずに中止する。
+   ============================================================ */
+
+// 中身を本文として扱わないタグ（buildTextIndexも除外している）
+const SRC_SKIP_TAGS = new Set(['script', 'style']);
+// 中身は本文だがタグを解釈しないタグ（実体参照だけデコードされる）
+const SRC_RAWTEXT_TAGS = new Set(['textarea', 'title']);
+
+const _entCache = new Map();
+function decodeEntityRef(ref) {
+  if (_entCache.has(ref)) return _entCache.get(ref);
+  let v = ref;
+  try {
+    // ブラウザ自身に実体参照を解かせる（名前付き実体は数百種あるため）
+    const ta = document.createElement('textarea');
+    ta.innerHTML = ref; // refは実体参照のみ。タグは含まない（正規表現で保証）
+    if (ta.value) v = ta.value;
+  } catch (e) { /* noop */ }
+  _entCache.set(ref, v);
+  return v;
+}
+
+// タグの終わりを返す（属性値の中の '>' に惑わされないように引用符を追う）
+function skipTagFrom(src, i) {
+  let j = i + 1;
+  while (j < src.length && src[j] !== '>') {
+    const ch = src[j];
+    if (ch === '"' || ch === "'") {
+      j++;
+      while (j < src.length && src[j] !== ch) j++;
+    }
+    j++;
+  }
+  return Math.min(j + 1, src.length);
+}
+
+// buildTextIndex と同じ規則で空白を正規化する（両者を突き合わせるため規則は1か所に持つ）
+function normalizeRaw(raw) {
+  let norm = '';
+  const map = [];
+  let lastSpace = true;
+  for (let i = 0; i < raw.length; i++) {
+    if (/\s/.test(raw[i])) {
+      if (!lastSpace) { norm += ' '; map.push(i); lastSpace = true; }
+    } else {
+      norm += raw[i]; map.push(i); lastSpace = false;
+    }
+  }
+  return { norm, map };
+}
+
+// HTMLソースから本文テキストを、1文字ごとのソース内位置つきで取り出す
+function buildSourceTextIndex(src) {
+  const chars = [];  // デコード後の文字（UTF-16単位）
+  const cOfs = [];   // 各文字のソース開始位置
+  const cEnd = [];   // 各文字のソース終了位置（排他）
+  const tags = [];   // タグ・コメント等の構造トークン（書き換え後の検証用）
+  const hasBody = /<body[\s>]/i.test(src);
+  let inBody = !hasBody; // body要素があるならその中だけが対象（headのtitle等を除く）
+  const n = src.length;
+  let i = 0;
+
+  const pushText = (text, s, e) => {
+    if (!inBody) return;
+    for (let k = 0; k < text.length; k++) { chars.push(text[k]); cOfs.push(s); cEnd.push(e); }
+  };
+  const takeRawText = (from, to) => {
+    let k = from;
+    while (k < to) {
+      if (src[k] === '&') {
+        const m = /^&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{0,31});/.exec(src.slice(k, k + 40));
+        if (m) { pushText(decodeEntityRef(m[0]), k, k + m[0].length); k += m[0].length; continue; }
+      }
+      pushText(src[k], k, k + 1);
+      k++;
+    }
+  };
+
+  while (i < n) {
+    if (src[i] === '<') {
+      if (src.startsWith(COMMENT_OPEN, i)) {
+        let j = src.indexOf('-->', i + 4);
+        j = (j === -1) ? n : j + 3;
+        tags.push(src.slice(i, j));
+        i = j;
+        continue;
+      }
+      const c1 = src[i + 1] || '';
+      if (c1 === '!' || c1 === '?') { // DOCTYPE や処理命令
+        const j = skipTagFrom(src, i);
+        tags.push(src.slice(i, j));
+        i = j;
+        continue;
+      }
+      const closing = (c1 === '/');
+      const nameChar = closing ? (src[i + 2] || '') : c1;
+      if (/[a-zA-Z]/.test(nameChar)) {
+        let k = i + (closing ? 2 : 1);
+        const nameStart = k;
+        while (k < n && !/[\s\/>]/.test(src[k])) k++;
+        const name = src.slice(nameStart, k).toLowerCase();
+        const tagEnd = skipTagFrom(src, i);
+        const tagText = src.slice(i, tagEnd);
+        tags.push(tagText);
+        if (name === 'body') inBody = !closing;
+        if (!closing && !tagText.endsWith('/>')) {
+          if (SRC_SKIP_TAGS.has(name)) { // 中身ごと読み飛ばす（本文ではない）
+            const mm = new RegExp('</' + name + '[\\s>]', 'i').exec(src.slice(tagEnd));
+            const contentEnd = mm ? tagEnd + mm.index : n;
+            tags.push(src.slice(tagEnd, contentEnd)); // 中身も構造として検証対象にする
+            i = contentEnd;
+            continue;
+          }
+          if (SRC_RAWTEXT_TAGS.has(name)) { // 中身は本文だがタグは解釈しない
+            const mm = new RegExp('</' + name + '[\\s>]', 'i').exec(src.slice(tagEnd));
+            const contentEnd = mm ? tagEnd + mm.index : n;
+            takeRawText(tagEnd, contentEnd);
+            i = contentEnd;
+            continue;
+          }
+        }
+        i = tagEnd;
+        continue;
+      }
+      pushText('<', i, i + 1); // タグにならない裸の '<'
+      i++;
+      continue;
+    }
+    if (src[i] === '&') {
+      const m = /^&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{0,31});/.exec(src.slice(i, i + 40));
+      if (m) { pushText(decodeEntityRef(m[0]), i, i + m[0].length); i += m[0].length; continue; }
+    }
+    pushText(src[i], i, i + 1);
+    i++;
+  }
+
+  const raw = chars.join('');
+  const { norm, map } = normalizeRaw(raw);
+  return { raw, norm, map, srcOfs: cOfs, srcEnd: cEnd, tags, hasBody };
+}
+
+// 表示中のDOMから、指定コメントのハイライト（mark）が占める raw 範囲を求める
+function markRawRange(domIdx, cid) {
+  const sel = 'mark.cr-mark[data-cid="' + cid + '"]';
+  let s = null, e = null;
+  for (const en of domIdx.entries) {
+    const p = en.node.parentElement;
+    if (p && p.closest && p.closest(sel)) {
+      if (s === null) s = en.start;
+      e = en.end;
+    }
+  }
+  return (s === null) ? null : { s, e };
+}
+
+function escapeHtmlText(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 直接修正をソースへ適用する計画を立てる。1件でも安全に適用できなければ確定版は作らない
+function planDirectEdits() {
+  const res = { available: false, plans: [], failures: [], blocked: null, edits: [], sidx: null };
+  const d = idoc();
+  const edits = state.comments.filter((c) => c.type === 'edit');
+  res.edits = edits;
+  if (!edits.length) return res;
+  if (!d) { res.blocked = '資料が表示されていないため'; return res; }
+  if ($('scriptsToggle').checked) {
+    res.blocked = '「スクリプトを実行」がオンのため（表示されている文字が元ファイルに無いことがあります）';
+    return res;
+  }
+  if (state.sourceEncoding && state.sourceEncoding !== 'utf-8') {
+    res.blocked = '元ファイルの文字コードがUTF-8ではないため（書き換えると文字化けの恐れがあります）';
+    return res;
+  }
+
+  const sidx = buildSourceTextIndex(state.cleanSource);
+  res.sidx = sidx;
+  const domIdx = buildTextIndex(d);
+  const domNorm = normalizeRaw(domIdx.raw);
+  // 入口の関門: 画面の文字と元ファイルの文字が完全に一致していなければ何もしない
+  if (domNorm.norm !== sidx.norm) {
+    res.blocked = '画面に表示されている文字と、元ファイルの文字が一致しないため';
+    return res;
+  }
+
+  const inv = new Int32Array(domIdx.raw.length).fill(-1);
+  for (let k = 0; k < domNorm.map.length; k++) inv[domNorm.map[k]] = k;
+
+  for (const c of edits) {
+    const short = normText(c.quote).slice(0, 18);
+    const rng = markRawRange(domIdx, c.id);
+    if (!rng) { res.failures.push({ c, short, reason: '画面上で位置が特定できていません' }); continue; }
+    let ns = -1, ne = -1;
+    for (let k = rng.s; k < rng.e; k++) if (inv[k] >= 0) { ns = inv[k]; break; }
+    for (let k = rng.e - 1; k >= rng.s; k--) if (inv[k] >= 0) { ne = inv[k] + 1; break; }
+    if (ns < 0 || ne <= ns) { res.failures.push({ c, short, reason: '選択が空白だけのため' }); continue; }
+    // 選択が短すぎる場合は扱わない。開き直したファイルではハイライトの位置を
+    // 文言の照合で復元しており、2〜4文字だと別の同じ文字列に付いている可能性が残るため
+    // （実測でも、誤った箇所を指した例はすべて3〜4文字の選択で起きている）
+    if (ne - ns < 5) {
+      res.failures.push({ c, short, reason: '選択が短いため（前後を含めて5文字以上を選び直すと直せます）' });
+      continue;
+    }
+    // 端が空白だと、ソース側の改行・字下げを潰してしまうので扱わない
+    if (sidx.norm[ns] === ' ' || sidx.norm[ne - 1] === ' ') {
+      res.failures.push({ c, short, reason: '選択の前後が空白のため（もう少し内側を選び直すと直せます）' });
+      continue;
+    }
+    const rawStart = sidx.map[ns];
+    const rawEnd = sidx.map[ne - 1] + 1;
+    const from0 = sidx.srcOfs[rawStart];
+    const to0 = sidx.srcEnd[rawEnd - 1];
+    if (state.cleanSource.slice(from0, to0).includes('<')) {
+      res.failures.push({ c, short, reason: '太字やリンクなどの書式をまたいでいるため' });
+      continue;
+    }
+    const origDec = sidx.raw.slice(rawStart, rawEnd);
+    const rep = String(c.replacement == null ? '' : c.replacement);
+    if (origDec === rep) continue; // 変化なし
+    if (!rep) { res.failures.push({ c, short, reason: '修正後の文言が空のため' }); continue; }
+    // 変わる部分だけに絞る（前後の共通部分は1バイトも触らない）
+    let a = 0;
+    while (a < origDec.length && a < rep.length && origDec[a] === rep[a]) a++;
+    let q = 0;
+    while (q < origDec.length - a && q < rep.length - a &&
+           origDec[origDec.length - 1 - q] === rep[rep.length - 1 - q]) q++;
+    let b = origDec.length - q;
+    if (a === b) {
+      // 純粋な挿入は「タグの直前か直後か」が決まらないので、必ず1文字以上を置換する形に広げる
+      if (b < origDec.length) b++;
+      else if (a > 0) a--;
+      else { res.failures.push({ c, short, reason: '変更点を特定できないため' }); continue; }
+    }
+    if (/\s/.test(origDec[a]) || /\s/.test(origDec[b - 1])) {
+      res.failures.push({ c, short, reason: '変わる部分の前後が空白のため' });
+      continue;
+    }
+    res.plans.push({
+      cid: c.id, a, b, origDec, rep, rawStart, rawEnd,
+      from: sidx.srcOfs[rawStart + a],
+      to: sidx.srcEnd[rawStart + b - 1],
+      text: escapeHtmlText(rep.slice(a, rep.length - (origDec.length - b))),
+    });
+  }
+
+  // 範囲が重なっていたら（近すぎる修正が2件ある等）全体を中止する
+  const sorted = [...res.plans].sort((x, y) => x.from - y.from);
+  for (let k = 1; k < sorted.length; k++) {
+    if (sorted[k].from < sorted[k - 1].to) {
+      res.failures.push({ c: null, short: '', reason: '修正どうしの範囲が重なっているため' });
+      break;
+    }
+  }
+  res.available = res.failures.length === 0 && res.plans.length > 0;
+  return res;
+}
+
+function applyPlans(src, plans) {
+  let out = src;
+  for (const p of [...plans].sort((x, y) => y.from - x.from)) { // 後ろから当てて位置ずれを防ぐ
+    out = out.slice(0, p.from) + p.text + out.slice(p.to);
+  }
+  return out;
+}
+
+// 書き込む前の検証。本文・タグ構造・ブラウザ解析の3通りで確かめる
+function verifyFinalized(out, plan) {
+  const sidx = plan.sidx;
+  let expRaw = sidx.raw;
+  for (const p of [...plan.plans].sort((x, y) => y.rawStart - x.rawStart)) {
+    expRaw = expRaw.slice(0, p.rawStart + p.a) +
+             p.rep.slice(p.a, p.rep.length - (p.origDec.length - p.b)) +
+             expRaw.slice(p.rawStart + p.b);
+  }
+  const expNorm = normalizeRaw(expRaw).norm;
+
+  const oidx = buildSourceTextIndex(out);
+  if (oidx.norm !== expNorm) return '本文が想定どおりに変わりませんでした';
+  if (oidx.tags.length !== sidx.tags.length) return 'HTMLの構造が変化しました';
+  for (let k = 0; k < sidx.tags.length; k++) {
+    if (sidx.tags[k] !== oidx.tags[k]) return 'HTMLの構造が変化しました';
+  }
+  // ブラウザ標準の解析でも裏を取る（自作の読み取りだけを信用しない）
+  try {
+    const doc = new DOMParser().parseFromString(out, 'text/html');
+    if (!doc || !doc.body) return 'HTMLとして読み取れませんでした';
+    let braw = '';
+    const w = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(nd) {
+        const p = nd.parentElement;
+        if (p && p.closest('script, style')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    while (w.nextNode()) braw += w.currentNode.data;
+    if (normalizeRaw(braw).norm !== expNorm) return 'ブラウザでの確認に失敗しました';
+  } catch (e) {
+    return 'ブラウザでの確認に失敗しました';
+  }
+  return null;
+}
+
+/* ============================================================
    保存（元ソース＋コメントJSONの埋め込み）
    ============================================================ */
 
@@ -3210,25 +3566,12 @@ function buildOutput() {
 function baseName() {
   return (state.fileName || 'document')
     .replace(/\.html?$/i, '')
-    .replace(/_コメント付き$/, '');
+    .replace(/_コメント付き$/, '')
+    .replace(/_確定版$/, '');
 }
 
-async function saveFile() {
-  if (!state.fileName) return;
-  // 保存前に未確定の操作を確定させる（入力途中のテキスト・ドラッグ途中の取りこぼし防止）
-  const dsave = idoc();
-  if (dsave && dsave.activeElement && dsave.activeElement.classList &&
-      dsave.activeElement.classList.contains('cr-textbox')) {
-    dsave.activeElement.blur();
-  }
-  flushPendingDrag();
-  if (!state.comments.length &&
-      !confirm('コメントが1件もありません。このまま保存しますか？')) {
-    return;
-  }
-  const out = buildOutput();
-  const name = baseName() + '_コメント付き.html';
-
+// 実際にファイルへ書き出す（保存先を選ぶ画面 → 使えない環境ならダウンロード）
+async function writeOut(out, name) {
   if (window.showSaveFilePicker) {
     try {
       const handle = await window.showSaveFilePicker({
@@ -3238,12 +3581,9 @@ async function saveFile() {
       const w = await handle.createWritable();
       await w.write(out);
       await w.close();
-      state.dirty = false;
-      refresh();
-      toast(`保存しました：${handle.name || name}　→ このファイルをClaudeに渡してください（コメントの確認はこのツールで開き直し）`);
-      return;
+      return { ok: true, name: handle.name || name, picked: true };
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError') return { ok: false };
       // 失敗したらダウンロードにフォールバック
     }
   }
@@ -3255,9 +3595,161 @@ async function saveFile() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  return { ok: true, name, picked: false };
+}
+
+async function saveFile() {
+  if (!state.fileName) return;
+  // 保存前に未確定の操作を確定させる（入力途中のテキスト・ドラッグ途中の取りこぼし防止）
+  const dsave = idoc();
+  if (dsave && dsave.activeElement && dsave.activeElement.classList &&
+      dsave.activeElement.classList.contains('cr-textbox')) {
+    dsave.activeElement.blur();
+  }
+  flushPendingDrag();
+  // 直接修正があるときだけ「保存のしかた」を選んでもらう。無ければ今までどおり
+  const plan = planDirectEdits();
+  if (plan.edits.length) { openFinalizeDialog(plan); return; }
+  await saveCommentFile();
+}
+
+async function saveCommentFile() {
+  if (!state.comments.length &&
+      !confirm('コメントが1件もありません。このまま保存しますか？')) {
+    return;
+  }
+  const out = buildOutput();
+  const name = baseName() + '_コメント付き.html';
+  const r = await writeOut(out, name);
+  if (!r.ok) return;
   state.dirty = false;
   refresh();
-  toast(`「${name}」をダウンロードしました　→ このファイルをClaudeに渡してください（コメントの確認はこのツールで開き直し）`);
+  toast(r.picked
+    ? `保存しました：${r.name}　→ このファイルをClaudeに渡してください（コメントの確認はこのツールで開き直し）`
+    : `「${r.name}」をダウンロードしました　→ このファイルをClaudeに渡してください（コメントの確認はこのツールで開き直し）`);
+}
+
+// 直接修正を元のHTMLに書き込んで「確定版」を保存する
+async function saveFinalized(plan) {
+  const out = applyPlans(state.cleanSource, plan.plans);
+  const err = verifyFinalized(out, plan);
+  if (err) {
+    // 検証に1つでも通らなければ、ファイルは1バイトも作らない
+    toast('念のための確認に通らなかったため、保存を中止しました（ファイルは作られていません）：' + err);
+    return;
+  }
+  const name = baseName() + '_確定版.html';
+  const r = await writeOut(out, name);
+  if (!r.ok) return;
+  const applied = plan.plans.length;
+  // 画面も確定版に切り替える（同じ修正を二重に反映してしまう事故を防ぐ）
+  state.cleanSource = out;
+  state.comments = state.comments.filter((c) => c.type !== 'edit');
+  state.fileName = r.name;
+  await renderDoc();
+  const rest = state.comments.length;
+  const lost = state.comments.filter((c) => c.anchored === false).length;
+  state.dirty = rest > 0;
+  updateHeader();
+  refresh();
+  let msg = `確定版を保存しました：${r.name}（直接修正${applied}件を反映）　画面もこの内容に切り替えました`;
+  if (rest) {
+    msg += `　／　コメント${rest}件が残っています`;
+    if (lost) msg += `（うち${lost}件は位置が特定できませんでした）`;
+  }
+  toast(msg);
+}
+
+/* ---------- 保存のしかたを選ぶ画面 ---------- */
+
+function closeFinalDlg() {
+  const dlg = $('finalDlg');
+  if (typeof dlg.close === 'function') dlg.close();
+  else dlg.removeAttribute('open');
+}
+
+function openFinalizeDialog(plan) {
+  const box = $('finalBody');
+  box.textContent = '';
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  const sidx = plan.sidx;
+  const ctx = (from, to) => (sidx ? normText(sidx.raw.slice(Math.max(0, from), to)) : '');
+  const noChange = !plan.blocked && plan.plans.length === 0 && plan.failures.length === 0;
+
+  if (plan.available) {
+    box.appendChild(el('p', 'fin-lead',
+      `直接修正 ${plan.plans.length}件を、このファイルに直接反映できます。内容をご確認ください。`));
+    const list = el('div', 'fin-list');
+    plan.plans.forEach((p, i) => {
+      const row = el('div', 'fin-row');
+      row.appendChild(el('span', 'fin-no', (i + 1) + '. '));
+      row.appendChild(el('span', 'fin-ctx', '…' + ctx(p.rawStart - 14, p.rawStart)));
+      row.appendChild(el('span', 'fin-old', p.origDec));
+      row.appendChild(el('span', null, ' → '));
+      row.appendChild(el('span', 'fin-new', p.rep));
+      row.appendChild(el('span', 'fin-ctx', ctx(p.rawEnd, p.rawEnd + 14) + '…'));
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+  } else {
+    const w = el('div', 'fin-warn');
+    if (plan.blocked) {
+      w.appendChild(el('div', null, `この資料では、その場での確定はできません（${plan.blocked}）。`));
+    } else if (noChange) {
+      w.appendChild(el('div', null, '直接修正の文言が元の文言と同じため、書き換える箇所がありません。'));
+    } else {
+      w.appendChild(el('div', null,
+        `直接修正 ${plan.edits.length}件のうち ${plan.failures.length}件は、その場では確定できません。`));
+      const ul = el('ul', 'fin-why');
+      plan.failures.forEach((f) => {
+        ul.appendChild(el('li', null, (f.short ? `「${f.short}」… ` : '') + f.reason));
+      });
+      w.appendChild(ul);
+      w.appendChild(el('div', null,
+        '安全のため、一部だけを反映することはしません（直したつもりの箇所が古いまま残るのを防ぐためです）。'));
+    }
+    w.appendChild(el('div', null, 'コメント付きで保存して、Claudeにお願いしてください。'));
+    box.appendChild(w);
+  }
+
+  const optA = el('div', 'fin-opt');
+  optA.appendChild(el('h3', null, 'コメントを付けたまま保存して、Claudeに渡す'));
+  optA.appendChild(el('p', null,
+    '直接修正・コメント・デザイン調整を、すべて指示としてファイルに書き込みます。'));
+  optA.appendChild(el('div', 'fname', '→ ' + baseName() + '_コメント付き.html'));
+  const bA = el('button', null, 'コメント付きで保存');
+  bA.addEventListener('click', () => { closeFinalDlg(); saveCommentFile(); });
+  optA.appendChild(bA);
+  box.appendChild(optA);
+
+  if (plan.available) {
+    const optB = el('div', 'fin-opt');
+    optB.appendChild(el('h3', null, '直接修正だけを確定して、仕上がりのHTMLにする'));
+    optB.appendChild(el('p', null,
+      `上の${plan.plans.length}件をこのファイルに書き込んで確定します。そのまま開いて読める・印刷できるHTMLになり、Claudeに渡す必要はありません。`));
+    const rest = state.comments.filter((c) => c.type !== 'edit').length;
+    if (rest) {
+      optB.appendChild(el('p', 'fin-rest',
+        `※ コメント・デザイン調整が${rest}件残っています。これらは反映されません（あとで「コメント付きで保存」してClaudeにお渡しください）。`));
+    }
+    optB.appendChild(el('div', 'fname', '→ ' + baseName() + '_確定版.html'));
+    const bB = el('button', null, '確定して保存');
+    bB.addEventListener('click', () => { closeFinalDlg(); saveFinalized(plan); });
+    optB.appendChild(bB);
+    box.appendChild(optB);
+  }
+
+  box.appendChild(el('div', 'fin-note',
+    `元のファイル「${state.fileName}」は、どちらを選んでも書き換えられません。`));
+
+  const dlg = $('finalDlg');
+  if (typeof dlg.showModal === 'function') dlg.showModal();
+  else dlg.setAttribute('open', '');
 }
 
 /* ============================================================
@@ -3297,6 +3789,7 @@ $('helpBtn').addEventListener('click', () => {
   if (typeof dlg.showModal === 'function') dlg.showModal();
   else dlg.setAttribute('open', '');
 });
+$('finalCancel').addEventListener('click', closeFinalDlg);
 $('helpClose').addEventListener('click', () => {
   const dlg = $('helpDlg');
   if (typeof dlg.close === 'function') dlg.close();
@@ -3374,6 +3867,15 @@ window.__cr = {
     find: findDesignTarget,
     summary: designSummary,
     entryOf: designEntryOf,
+  },
+  // その場確定（テスト用）
+  finalize: {
+    plan: planDirectEdits,
+    apply: applyPlans,
+    verify: verifyFinalized,
+    srcIndex: buildSourceTextIndex,
+    normRaw: normalizeRaw,
+    save: saveFinalized,
   },
   addDocumentComment: (text) => {
     beginComposer('document', null);
